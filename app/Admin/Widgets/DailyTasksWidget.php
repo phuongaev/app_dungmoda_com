@@ -29,10 +29,52 @@ class DailyTasksWidget extends Widget
             
             $(function() {
                 var scriptConfig = $scriptVars;
-                var currentAjaxRequest = null; // Biến để lưu trữ request đang được thực hiện
+                var currentAjaxRequest = null;
+                var modalSaved = false;
+
+                // --- SỰ KIỆN CỦA MODAL (ĐỂ XỬ LÝ LỖI LOGIC) ---
+                var \$noteModal = $('#task-note-modal');
+
+                // Khi modal chuẩn bị hiển thị
+                \$noteModal.on('show.bs.modal', function() {
+                    // Reset cờ mỗi khi mở modal
+                    modalSaved = false; 
+                });
+
+                // Khi modal đã bị ẩn đi (bằng bất kỳ cách nào)
+                \$noteModal.on('hidden.bs.modal', function() {
+                    // Lấy checkbox đã kích hoạt modal (nếu có)
+                    var triggeringCheckbox = \$noteModal.data('triggeringCheckbox');
+
+                    // Nếu modal bị đóng mà không phải do bấm "Lưu" VÀ nó được kích hoạt bởi checkbox
+                    if (!modalSaved && triggeringCheckbox) {
+                        // Trả checkbox về trạng thái cũ (chưa check)
+                        triggeringCheckbox.prop('checked', false);
+                    }
+                    
+                    // Xóa tham chiếu sau khi xử lý xong
+                    \$noteModal.removeData('triggeringCheckbox');
+                });
+
+                // --- SỰ KIỆN NÚT LƯU TRONG MODAL ---
+                \$noteModal.on('click', '#save-task-note', function() {
+                    // Đánh dấu là đã bấm lưu
+                    modalSaved = true;
+
+                    var taskId = $('#modal-task-id').val();
+                    var notes = $('#modal-task-notes').val();
+                    
+                    var originalRequest = \$noteModal.data('originalRequest');
+                    
+                    \$noteModal.modal('hide');
+
+                    originalRequest.data.notes = notes;
+                    $.ajax(originalRequest);
+                });
 
                 // --- Mở Modal và xử lý Ghi chú ---
                 $('#task-note-modal').on('click', '#save-task-note', function() {
+                    modalSaved = true;
                     var taskId = $('#modal-task-id').val();
                     var notes = $('#modal-task-notes').val();
                     
@@ -48,21 +90,20 @@ class DailyTasksWidget extends Widget
                     $.ajax(currentAjaxRequest);
                 });
 
-                // --- Sự kiện Toggle Checkbox ---
+                // --- SỰ KIỆN TOGGLE CHECKBOX ---
                 $('.task-checkbox').on('change', function() {
                     var checkbox = $(this);
                     var taskId = checkbox.data('task-id');
                     var isCompleted = checkbox.is(':checked');
                     var taskRow = checkbox.closest('.task-item');
                     
-                    // Chuẩn bị sẵn request AJAX
                     var ajaxRequest = {
                         url: scriptConfig.toggleUrl,
                         method: 'POST',
                         data: {
                             task_id: taskId,
                             completed: isCompleted,
-                            notes: '', // Sẽ được điền sau nếu cần
+                            notes: '',
                             _token: scriptConfig.csrfToken
                         },
                         success: function(response) {
@@ -77,38 +118,38 @@ class DailyTasksWidget extends Widget
                                 updateProgressBar();
                                 toastr.success(response.message);
                             } else {
-                                checkbox.prop('checked', !isCompleted); // Revert nếu lỗi
+                                checkbox.prop('checked', !isCompleted);
                                 toastr.error(response.message || 'Có lỗi xảy ra!');
                             }
                         },
                         error: function(xhr) {
-                            checkbox.prop('checked', !isCompleted); // Revert nếu lỗi
+                            checkbox.prop('checked', !isCompleted);
                             console.log('Error:', xhr.responseText);
                             toastr.error('Có lỗi kết nối!');
                         }
                     };
 
                     if (isCompleted) {
-                        // Nếu check 'hoàn thành', mở modal để hỏi ghi chú
+                        // Mở modal để hỏi ghi chú
                         $('#modal-task-id').val(taskId);
                         $('#modal-task-notes').val('').focus();
-                        // Lưu lại request để sau khi modal đóng sẽ thực hiện
-                        $('#task-note-modal').data('originalRequest', ajaxRequest);
-                        $('#task-note-modal').modal('show');
+                        
+                        // Lưu request và cả checkbox đã kích hoạt nó
+                        \$noteModal.data('originalRequest', ajaxRequest);
+                        \$noteModal.data('triggeringCheckbox', checkbox);                        
+                        \$noteModal.modal('show');
                     } else {
-                        // Nếu bỏ check, thực hiện AJAX ngay lập tức
-                        currentAjaxRequest = ajaxRequest;
-                        $.ajax(currentAjaxRequest);
+                        // Nếu bỏ check, thực hiện AJAX ngay
+                        $.ajax(ajaxRequest);
                     }
                 });
                 
-                // --- Sự kiện nút "Thêm ghi chú" ---
+                // --- SỰ KIỆN NÚT "THÊM GHI CHÚ" (Tương tự, nhưng đơn giản hơn) ---
                 $('.add-note-btn').on('click', function() {
                     var button = $(this);
                     var taskId = button.data('task-id');
                     var currentNote = button.data('current-note') || '';
                     
-                    // Chuẩn bị sẵn request AJAX
                     var ajaxRequest = {
                         url: scriptConfig.addNoteUrl,
                         method: 'POST',
@@ -119,8 +160,7 @@ class DailyTasksWidget extends Widget
                         },
                         success: function(response) {
                             if (response.success) {
-                                // Cập nhật lại data và text của nút
-                                var newNote = $('#task-note-modal').data('originalRequest').data.notes;
+                                var newNote = \$noteModal.data('originalRequest').data.notes;
                                 button.data('current-note', newNote);
                                 if (newNote) {
                                     button.html('<i class="fa fa-comment"></i> Đã có ghi chú');
@@ -132,18 +172,13 @@ class DailyTasksWidget extends Widget
                                 toastr.error(response.message || 'Có lỗi xảy ra!');
                             }
                         },
-                        error: function(xhr) {
-                            console.log('Error:', xhr.responseText);
-                            toastr.error('Có lỗi kết nối!');
-                        }
+                        error: function(xhr) { /* ... */ }
                     };
                     
-                    // Mở modal và truyền ghi chú hiện tại vào
                     $('#modal-task-id').val(taskId);
                     $('#modal-task-notes').val(currentNote).focus();
-                    // Lưu lại request
-                    $('#task-note-modal').data('originalRequest', ajaxRequest);
-                    $('#task-note-modal').modal('show');
+                    \$noteModal.data('originalRequest', ajaxRequest);
+                    \$noteModal.modal('show');
                 });
 
                 // --- Hàm cập nhật thanh tiến trình (giữ nguyên) ---
