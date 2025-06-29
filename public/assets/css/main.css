@@ -1,0 +1,194 @@
+@import url('https://fonts.googleapis.com/css?family=Roboto:300,400,500,600,700&display=swap');
+body, .content, .box, .navbar, .sidebar, .form-control, .table, .nav, .main-header, h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: Roboto, Arial, sans-serif !important;
+}
+
+
+
+
+@charset "UTF-8";
+.form-select2 {
+  background-image: none !important;
+}
+
+.column-labels .select2-container {
+  width: 100% !important;
+}
+.column-labels span.select2-selection.select2-selection--multiple {
+  border: none;
+}
+.column-labels span.select2-selection.select2-selection--multiple {
+  background-color: transparent;
+}
+.column-labels .select2-selection__choice__remove {
+  border-right: none !important;
+}
+
+.flatpickr-calendar .options {
+  position: absolute;
+  background-color: white;
+  right: -142px;
+  padding-top: 6px;
+  height: 100%;
+}
+.flatpickr-calendar .options ul {
+  width: 150px;
+  list-style: none;
+  padding-left: 9px;
+  padding-right: 0;
+}
+.flatpickr-calendar .options li {
+  width: 100%;
+  margin-right: 20px;
+  margin-bottom: 4px;
+}
+.flatpickr-calendar .options li.active a {
+  color: #1b78f1;
+}
+.flatpickr-calendar .options a {
+  color: black;
+}
+.flatpickr-calendar .options a:hover {
+  color: #287eef;
+}
+
+@keyframes rotate {
+  100% {
+    transform: rotate(1turn);
+  }
+}
+.rainbow {
+  position: relative;
+  z-index: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  justify-content: center;
+  align-items: center;
+}
+.rainbow::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  left: -50%;
+  top: -50%;
+  width: 200%;
+  height: 200%;
+  background-repeat: no-repeat;
+  background-size: 50% 50%, 50% 50%;
+  background-position: 0 0, 100% 0, 100% 100%, 0 100%;
+  background-image: linear-gradient(#399953, #399953), linear-gradient(#fbb300, #fbb300), linear-gradient(#d53e33, #d53e33), linear-gradient(#377af5, #377af5);
+  animation: rotate 4s linear infinite;
+}
+.rainbow::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 2px;
+  top: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  border-radius: 4px;
+  background-color: #0c63e4;
+}
+
+table td, table th {
+  border-right: 1px solid #f3f3f3 !important;
+}
+
+table tfoot th {
+  white-space: nowrap;
+}
+table tfoot th:after {
+  display: block;
+  color: #666666;
+  font-size: 13px;
+}
+table tfoot .total:after {
+  content: "Tổng";
+}
+table tfoot .avg:after {
+  content: "Trung bình";
+}
+
+div#kt_ecommerce_sales_table_wrapper::-webkit-scrollbar {
+  height: 12px;
+}
+
+.account-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  display: inline-block;
+}
+
+.text-limit {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: var(--line, 1);
+  line-clamp: var(--line, 1);
+  -webkit-box-orient: vertical;
+}
+
+#kt_ecommerce_sales_table_wrapper {
+  overflow-x: scroll;
+}
+#kt_ecommerce_sales_table_wrapper .table-responsive {
+  min-width: 1920px;
+}
+
+.prepend-label {
+  height: 100%;
+  background-color: var(--kt-input-solid-bg);
+  border-color: var(--kt-input-solid-bg);
+  color: var(--kt-input-solid-color);
+  transition: color 0.2s ease;
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+
+.prepend-input .select2-selection {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+.act-info {
+  position: relative;
+}
+.act-info .host-accounts {
+  position: absolute;
+  width: 520px;
+  display: none;
+  z-index: 2;
+}
+.act-info .host-accounts .th {
+  padding: 10px 16px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.act-info .host-accounts .host {
+  cursor: pointer;
+  padding: 10px 16px;
+}
+.act-info .host-accounts .host.active {
+  background-color: #0c63e4;
+  color: white !important;
+  border-radius: 12px;
+}
+.act-info .host-accounts .host-threshold {
+  border-right: 1px solid #e5e5e5;
+}
+
+.modal .nav-link.active {
+  border: 1px solid #666;
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+  border-bottom: none;
+  margin-right: 0.25rem;
+  background-color: #0095e8;
+  color: white;
+}
+
+.column-note img {
+  max-height: 100px !important;
+}

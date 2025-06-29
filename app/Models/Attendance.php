@@ -1,0 +1,79 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Encore\Admin\Auth\Database\Administrator;
+
+class Attendance extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'user_id',
+        'check_in_time',
+        'check_out_time', 
+        'check_in_ip',
+        'check_out_ip',
+        'work_hours',
+        'work_minutes',
+        'work_date',
+        'status',
+        'notes'
+    ];
+
+    protected $casts = [
+        'check_in_time' => 'datetime',
+        'check_out_time' => 'datetime',
+        'work_date' => 'date'
+    ];
+
+    public function user()
+    {
+        return $this->belongsTo(Administrator::class, 'user_id');
+    }
+
+    public function getTotalWorkTimeAttribute()
+    {
+        if ($this->work_hours || $this->work_minutes) {
+            return sprintf('%02d:%02d', $this->work_hours, $this->work_minutes);
+        }
+        return '00:00';
+    }
+
+    public function getStatusLabelAttribute()
+    {
+        $labels = [
+            'checked_in' => 'Đã vào',
+            'checked_out' => 'Đã ra',
+            'incomplete' => 'Chưa hoàn thành'
+        ];
+        return $labels[$this->status] ?? $this->status;
+    }
+
+    public function calculateWorkTime()
+    {
+        if ($this->check_in_time && $this->check_out_time) {
+            $diff = $this->check_out_time->diff($this->check_in_time);
+            $this->work_hours = $diff->h + ($diff->days * 24);
+            $this->work_minutes = $diff->i;
+            $this->status = 'checked_out';
+            $this->save();
+        }
+    }
+
+    // Scope để lấy attendance hôm nay của user
+    public function scopeTodayByUser($query, $userId)
+    {
+        return $query->where('user_id', $userId)
+                    ->where('work_date', today());
+    }
+
+    // Scope để lấy attendance tháng này
+    public function scopeThisMonth($query)
+    {
+        return $query->whereMonth('work_date', now()->month)
+                    ->whereYear('work_date', now()->year);
+    }
+}

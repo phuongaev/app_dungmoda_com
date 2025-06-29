@@ -1,0 +1,5 @@
+@import url('https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap');
+
+body, .content, .box, .navbar, .sidebar, .form-control, .table, .nav, .main-header {
+    font-family: 'Roboto', Arial, sans-serif !important;
+}
