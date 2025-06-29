@@ -15,8 +15,8 @@ class DailyTasksWidget extends Widget
 
     public function script()
     {
-        $toggleUrl = admin_url('daily-tasks/toggle-completion');
-        $addNoteUrl = admin_url('daily-tasks/add-note');
+        $toggleUrl = admin_url('daily-tasks/ajax/toggle-completion');
+        $addNoteUrl = admin_url('daily-tasks/ajax/add-note');
         
         // Dùng hàm json_encode để truyền biến PHP vào JS một cách an toàn
         $scriptVars = json_encode([
@@ -70,24 +70,6 @@ class DailyTasksWidget extends Widget
 
                     originalRequest.data.notes = notes;
                     $.ajax(originalRequest);
-                });
-
-                // --- Mở Modal và xử lý Ghi chú ---
-                $('#task-note-modal').on('click', '#save-task-note', function() {
-                    modalSaved = true;
-                    var taskId = $('#modal-task-id').val();
-                    var notes = $('#modal-task-notes').val();
-                    
-                    // Lấy thông tin về request gốc đã được lưu khi mở modal
-                    var originalRequest = $('#task-note-modal').data('originalRequest');
-                    
-                    // Đóng modal
-                    $('#task-note-modal').modal('hide');
-
-                    // Gắn ghi chú vào request và thực hiện nó
-                    originalRequest.data.notes = notes;
-                    currentAjaxRequest = originalRequest;
-                    $.ajax(currentAjaxRequest);
                 });
 
                 // --- SỰ KIỆN TOGGLE CHECKBOX ---
@@ -187,7 +169,7 @@ class DailyTasksWidget extends Widget
                     var completed = $('.task-checkbox:checked').length;
                     var percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
                     
-                    $('.progress-bar').css('width', percentage + '%').text(percentage + '%');
+                    $('.progress-bar').css('width', percentage + '%');
                     $('.progress-text').text(completed + '/' + total + ' công việc hoàn thành');
                     
                     $('.progress-bar').removeClass('progress-bar-danger progress-bar-warning progress-bar-success');

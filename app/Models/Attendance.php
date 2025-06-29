@@ -42,23 +42,34 @@ class Attendance extends Model
         return '00:00';
     }
 
+    // Attribute để hiển thị trạng thái bằng tiếng Việt
     public function getStatusLabelAttribute()
     {
-        $labels = [
-            'checked_in' => 'Đã vào',
-            'checked_out' => 'Đã ra',
-            'incomplete' => 'Chưa hoàn thành'
-        ];
-        return $labels[$this->status] ?? $this->status;
+        switch ($this->status) {
+            case 'checked_in':
+                return 'Đang làm việc';
+            case 'checked_out':
+                return 'Đã kết thúc ca';
+            case 'incomplete':
+                return 'Chưa hoàn thành';
+            default:
+                return 'Không xác định';
+        }
     }
 
+    // Tính toán thời gian làm việc
     public function calculateWorkTime()
     {
         if ($this->check_in_time && $this->check_out_time) {
-            $diff = $this->check_out_time->diff($this->check_in_time);
-            $this->work_hours = $diff->h + ($diff->days * 24);
-            $this->work_minutes = $diff->i;
+            $checkIn = Carbon::parse($this->check_in_time);
+            $checkOut = Carbon::parse($this->check_out_time);
+            
+            $totalMinutes = $checkOut->diffInMinutes($checkIn);
+            
+            $this->work_hours = intval($totalMinutes / 60);
+            $this->work_minutes = $totalMinutes % 60;
             $this->status = 'checked_out';
+            
             $this->save();
         }
     }
@@ -76,4 +87,22 @@ class Attendance extends Model
         return $query->whereMonth('work_date', now()->month)
                     ->whereYear('work_date', now()->year);
     }
+
+
+    // Scope để lấy nhân viên đang online
+    public function scopeOnlineToday($query)
+    {
+        return $query->where('work_date', today())
+                    ->whereNotNull('check_in_time')
+                    ->whereNull('check_out_time');
+    }
+
+    // Scope để lấy nhân viên đã kết thúc ca
+    public function scopeCompletedToday($query)
+    {
+        return $query->where('work_date', today())
+                    ->whereNotNull('check_in_time')
+                    ->whereNotNull('check_out_time');
+    }
+
 }

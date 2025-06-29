@@ -21,17 +21,18 @@
                 <div class="progress-group">
                     <span class="progress-text">{{ $completedTasks }}/{{ $totalTasks }} công việc hoàn thành</span>
                     <span class="float-right"><b>{{ $completionRate }}%</b></span>
-                    <div class="progress progress-sm" style="height: 19px !important; margin: 5px 0 0 0;">
+                    <div class="progress progress-sm" style="height: 10px !important; margin: 5px 0 0 0;">
                         <div class="progress-bar 
                             @if($completionRate < 30) progress-bar-danger
                             @elseif($completionRate < 70) progress-bar-warning  
                             @else progress-bar-success
                             @endif" 
-                            style="width: {{ $completionRate }}%">{{ $completionRate }}%</div>
+                            style="width: {{ $completionRate }}%"></div>
                     </div>
                 </div>
             </div>
         </div>
+
 
         <hr>
 
@@ -187,7 +188,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal">Hủy</button>
-                <button type="button" class="btn btn-primary" id="save-task-note">Lưu ghi chú</button>
+                <button type="button" class="btn btn-primary" id="save-task-note">Hoàn thành</button>
             </div>
         </div>
     </div>

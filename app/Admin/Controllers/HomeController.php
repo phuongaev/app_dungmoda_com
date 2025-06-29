@@ -13,6 +13,7 @@ use App\Models\Attendance;
 use App\Models\Package;
 
 use App\Admin\Widgets\DailyTasksWidget;
+use App\Admin\Widgets\OnlineEmployeesWidget;
 
 class HomeController extends Controller
 {
@@ -28,10 +29,17 @@ class HomeController extends Controller
             // ->row(Dashboard::title())
 
             // Row 1: Alert kiện hàng (full width)
-            ->row(function (Row $row) {
+            ->row(function (Row $row) use ($userRoles) {
                 // Chấm công
-                $row->column(6, function (Column $column) {
+                $row->column(6, function (Column $column) use ($userRoles) {
                     $column->append($this->attendanceWidget());
+
+                    $column->append(new OnlineEmployeesWidget());
+
+                    // Kiện hàng cần xử lý
+                    if (in_array('ceo', $userRoles)) {
+                        $column->append($this->packagesWidget());
+                    }
                 });
                 
                 // Đơn hàng cần xử lý
@@ -42,12 +50,12 @@ class HomeController extends Controller
 
 
             // Row 2: 
-            ->row(function (Row $row) use ($userRoles) {
-                if (in_array('ceo', $userRoles)) {
+            ->row(function (Row $row) {
+                
                     $row->column(6, function (Column $column) {
-                        $column->append($this->packagesWidget());
+                        
                     });
-                }
+                
             });
 
    
