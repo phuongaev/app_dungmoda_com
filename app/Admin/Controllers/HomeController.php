@@ -37,9 +37,9 @@ class HomeController extends Controller
                     $column->append(new OnlineEmployeesWidget());
 
                     // Kiện hàng cần xử lý
-                    if (in_array('ceo', $userRoles)) {
-                        $column->append($this->packagesWidget());
-                    }
+                    // if (in_array('ceo', $userRoles)) {
+                    //     $column->append($this->packagesWidget());
+                    // }
                 });
                 
                 // Đơn hàng cần xử lý

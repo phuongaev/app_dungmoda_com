@@ -57,19 +57,13 @@ class Attendance extends Model
         }
     }
 
-    // Tính toán thời gian làm việc
     public function calculateWorkTime()
     {
         if ($this->check_in_time && $this->check_out_time) {
-            $checkIn = Carbon::parse($this->check_in_time);
-            $checkOut = Carbon::parse($this->check_out_time);
-            
-            $totalMinutes = $checkOut->diffInMinutes($checkIn);
-            
-            $this->work_hours = intval($totalMinutes / 60);
-            $this->work_minutes = $totalMinutes % 60;
+            $diff = $this->check_out_time->diff($this->check_in_time);
+            $this->work_hours = $diff->h + ($diff->days * 24);
+            $this->work_minutes = $diff->i;
             $this->status = 'checked_out';
-            
             $this->save();
         }
     }

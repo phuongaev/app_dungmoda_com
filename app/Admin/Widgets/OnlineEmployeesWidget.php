@@ -36,10 +36,15 @@ class OnlineEmployeesWidget extends Widget
             ->orderBy('check_in_time', 'desc')
             ->get();
 
+        // Check xem current user có role CEO không
+        $currentUser = \Encore\Admin\Facades\Admin::user();
+        $isCEO = $currentUser && $currentUser->roles->pluck('slug')->contains('ceo');
+
         $this->data = [
             'online_employees' => $onlineEmployees,
             'total_online' => $onlineEmployees->count(),
-            'total_employees' => Administrator::where('id', '>', 1)->count() // Bỏ qua admin
+            // 'total_employees' => Administrator::where('id', '>', 1)->count(), // Bỏ qua admin
+            'is_ceo' => $isCEO
         ];
     }
 

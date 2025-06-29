@@ -2,7 +2,7 @@
 <div class="box box-success">
     <div class="box-header with-border">
         <h3 class="box-title">
-            <i class="fa fa-users text-green"></i> Nhân viên đang Online
+            <i class="fa fa-users text-green"></i> Nhân viên đang online
             <span class="badge bg-green">{{ $total_online }}</span>
         </h3>
         <div class="box-tools pull-right">
@@ -13,43 +13,44 @@
     </div>
     
     <div class="box-body">
-        <div class="info-box">
-            <span class="info-box-icon bg-green"><i class="fa fa-clock-o"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Nhân viên đang làm việc</span>
-                <span class="info-box-number">{{ $total_online }}/{{ $total_employees }}</span>
-                <div class="progress">
-                    <div class="progress-bar bg-green" style="width: {{ $total_employees > 0 ? ($total_online / $total_employees * 100) : 0 }}%"></div>
-                </div>
-                <span class="progress-description">
-                    {{ $total_employees > 0 ? round($total_online / $total_employees * 100, 1) : 0 }}% nhân viên đã vào ca
-                </span>
-            </div>
-        </div>
 
         @if($online_employees->count() > 0)
             <div class="online-list">
-                <h5><i class="fa fa-list"></i> Danh sách nhân viên đang online:</h5>
                 
                 @foreach($online_employees as $attendance)
                     @if($attendance->user)
                     <div class="employee-item">
                         <div class="employee-avatar">
-                            <i class="fa fa-user-circle text-green"></i>
+                            @if($attendance->user->avatar)
+                                <img src="{{ $attendance->user->avatar }}" alt="{{ $attendance->user->name }}" class="avatar-img">
+                            @else
+                                <img src="{{ config('admin.default_avatar') }}" alt="{{ $attendance->user->name }}" class="avatar-img">
+                            @endif
+                            <span class="online-dot"></span>
                         </div>
                         <div class="employee-info">
                             <strong>{{ $attendance->user->name }}</strong>
+                            @if($attendance->user->username)
+                                <span class="text-muted">({{ $attendance->user->username }})</span>
+                            @endif
                             <br>
-                            <small class="text-muted">
-                                <i class="fa fa-clock-o"></i>
-                                Vào ca: {{ $attendance->check_in_time->format('H:i:s') }}
-                                ({{ $attendance->check_in_time->diffForHumans() }})
-                            </small>
-                            <br>
-                            <small class="text-success">
-                                <i class="fa fa-circle"></i>
-                                Đang làm việc: {{ $attendance->check_in_time->diffInHours(now()) }}h {{ $attendance->check_in_time->diffInMinutes(now()) % 60 }}p
-                            </small>
+                            @if($is_ceo)
+                                <small class="text-muted">
+                                    <i class="fa fa-clock-o"></i>
+                                    Vào ca: {{ $attendance->check_in_time->format('H:i:s') }}
+                                    ({{ $attendance->check_in_time->diffForHumans() }})
+                                </small>
+                                <br>
+                                <small class="text-success">
+                                    <i class="fa fa-circle"></i>
+                                    Đang làm việc: {{ $attendance->check_in_time->diffInHours(now()) }}h {{ $attendance->check_in_time->diffInMinutes(now()) % 60 }}p
+                                </small>
+                            @else
+                                <small class="text-success">
+                                    <i class="fa fa-circle"></i>
+                                    Đang làm việc
+                                </small>
+                            @endif
                         </div>
                         <div class="employee-status">
                             <span class="label label-success">
@@ -87,8 +88,28 @@
 }
 
 .employee-avatar {
-    margin-right: 12px;
-    font-size: 24px;
+    position: relative;
+    margin-right: 15px;
+}
+
+.avatar-img {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #00a65a;
+}
+
+.online-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    background: #00a65a;
+    border: 2px solid white;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
 }
 
 .employee-info {
@@ -97,10 +118,6 @@
 
 .employee-status {
     margin-left: 10px;
-}
-
-.online-list {
-    margin-top: 15px;
 }
 
 .online-list h5 {
