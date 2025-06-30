@@ -4,6 +4,7 @@ use Illuminate\Routing\Router;
 use App\Admin\Controllers\CashFlowController;
 use App\Admin\Controllers\ShipmentController;
 use App\Admin\Controllers\AttendanceController;
+use App\Admin\Controllers\DailyTaskProgressController;
 
 Admin::routes();
 
@@ -77,12 +78,25 @@ Route::group([
     
     // Daily Tasks
     $router->resource('daily-tasks', DailyTaskController::class);
+
+    // Routes cho quản lý tiến độ công việc nhân viên
+    $router->group([
+        'prefix' => 'daily-task-progress',
+        'as' => 'daily-task-progress.'
+    ], function ($router) {
+        // Dashboard tổng quan
+        $router->get('/', [DailyTaskProgressController::class, 'index'])->name('index');
+        // Tiến độ theo ngày
+        $router->get('/daily', [DailyTaskProgressController::class, 'daily'])->name('daily');
+        // Tiến độ theo tuần
+        $router->get('/weekly', [DailyTaskProgressController::class, 'weekly'])->name('weekly');
+        // Chi tiết tiến độ của một nhân viên
+        $router->get('/{user}/detail', [DailyTaskProgressController::class, 'userDetail'])->name('user-detail');
+    });
     
     // AJAX Routes for task completion
     $router->post('daily-tasks/ajax/toggle-completion', 'DailyTaskAjaxController@toggleCompletion');
     $router->post('daily-tasks/ajax/add-note', 'DailyTaskAjaxController@addNote');
     $router->get('daily-tasks/ajax/stats', 'DailyTaskAjaxController@getStats');
     $router->get('daily-tasks/ajax/weekly-report', 'DailyTaskAjaxController@getWeeklyReport');
-
-
 });

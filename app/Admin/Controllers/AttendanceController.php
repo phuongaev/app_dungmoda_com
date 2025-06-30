@@ -11,10 +11,18 @@ use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
 
 use Encore\Admin\Auth\Database\Administrator;
+use App\Services\AttendanceWebhookService; // Import webhook service
 
 class AttendanceController extends Controller
 {
     use HasResourceActions;
+
+    protected $webhookService;
+
+    public function __construct(AttendanceWebhookService $webhookService)
+    {
+        $this->webhookService = $webhookService;
+    }
 
     /**
      * Index interface.
@@ -103,41 +111,16 @@ class AttendanceController extends Controller
 
         $grid->column('check_out_time', __('Giờ ra'))
             ->display(function ($value) {
-                return $value ? date('H:i:s', strtotime($value)) : '<span class="text-muted">Chưa ra</span>';
+                return $value ? date('H:i:s', strtotime($value)) : 'Chưa ra';
             })
             ->sortable();
 
-        $grid->column('total_work_time', __('Thời gian làm'))
-            ->display(function () {
-                return $this->total_work_time;
-            });
-
-        $grid->column('status', __('Trạng thái'))
-            ->display(function ($value) {
-                return $this->status_label;
-            })
-            ->label([
-                'checked_in' => 'warning',
-                'checked_out' => 'success',
-                'incomplete' => 'danger'
-            ])
-            ->filter([
-                'checked_in' => 'Đã vào',
-                'checked_out' => 'Đã ra',
-                'incomplete' => 'Chưa hoàn thành'
-            ]);
-
-        $grid->column('check_in_ip', __('IP vào'))->width(120);
-        $grid->column('check_out_ip', __('IP ra'))->width(120);
-
-        $grid->column('notes', __('Ghi chú'))->editable('textarea');
-
-        $grid->filter(function($filter) {
-            $filter->disableIdFilter();
-            $filter->like('user.name', 'Nhân viên');
-            $filter->date('work_date', 'Ngày làm việc');
-            $filter->between('check_in_time', 'Giờ vào')->datetime();
-        });
+        $grid->column('total_work_time', __('Thời gian làm'));
+        $grid->column('status', __('Trạng thái'))->label([
+            'checked_in' => 'success',
+            'checked_out' => 'primary',
+            'incomplete' => 'warning'
+        ]);
 
         return $grid;
     }
@@ -157,13 +140,14 @@ class AttendanceController extends Controller
         $show->field('work_date', __('Ngày làm việc'));
         $show->field('check_in_time', __('Giờ vào'));
         $show->field('check_out_time', __('Giờ ra'));
-        $show->field('total_work_time', __('Thời gian làm'));
         $show->field('check_in_ip', __('IP vào'));
         $show->field('check_out_ip', __('IP ra'));
-        $show->field('status_label', __('Trạng thái'));
+        $show->field('work_hours', __('Số giờ làm'));
+        $show->field('work_minutes', __('Số phút làm'));
+        $show->field('status', __('Trạng thái'));
         $show->field('notes', __('Ghi chú'));
-        $show->field('created_at', __('Ngày tạo'));
-        $show->field('updated_at', __('Ngày cập nhật'));
+        $show->field('created_at', __('Tạo lúc'));
+        $show->field('updated_at', __('Cập nhật lúc'));
 
         return $show;
     }
@@ -206,9 +190,7 @@ class AttendanceController extends Controller
         return $form;
     }
 
-
-
-    // API endpoint cho chấm công
+    // API endpoint cho chấm công vào
     public function checkIn()
     {
         $userId = \Admin::user()->id;
@@ -237,6 +219,11 @@ class AttendanceController extends Controller
             'status' => 'checked_in'
         ]);
 
+        // Gửi webhook cho check-in
+        if (config('attendance.webhook_enabled', true)) {
+            $this->webhookService->sendCheckInWebhook($attendance);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Chấm công vào thành công!',
@@ -245,6 +232,7 @@ class AttendanceController extends Controller
         ]);
     }
 
+    // API endpoint cho chấm công ra
     public function checkOut()
     {
         $userId = \Admin::user()->id;
@@ -273,6 +261,11 @@ class AttendanceController extends Controller
 
         // Calculate work time
         $currentSession->calculateWorkTime();
+
+        // Gửi webhook cho check-out
+        if (config('attendance.webhook_enabled', true)) {
+            $this->webhookService->sendCheckOutWebhook($currentSession);
+        }
 
         return response()->json([
             'success' => true,
@@ -318,7 +311,7 @@ class AttendanceController extends Controller
         ]);
     }
 
-    // THÊM METHOD MỚI - Lịch sử chấm công hôm nay
+    // Lịch sử chấm công hôm nay
     public function todayHistory()
     {
         $userId = \Admin::user()->id;
@@ -344,7 +337,15 @@ class AttendanceController extends Controller
         ]);
     }
 
-
-
-
+    // Test webhook endpoint
+    public function testWebhook()
+    {
+        $result = $this->webhookService->testWebhook();
+        
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['success'] ? 'Webhook test successful' : 'Webhook test failed',
+            'details' => $result
+        ]);
+    }
 }
