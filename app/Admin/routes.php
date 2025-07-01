@@ -15,6 +15,8 @@ Route::group([
     'as'            => config('admin.route.prefix') . '.',
 ], function (Router $router) {
 
+    $router->resource('auth/users', UserController::class)->names('auth.users');
+
     $router->get('/', 'HomeController@index')->name('home');
 
     $router->get('dashboard/packages', 'DashboardController@packages')->name('dashboard.packages');

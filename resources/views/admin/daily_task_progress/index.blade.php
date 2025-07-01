@@ -2,7 +2,28 @@
 
 <!-- Thống kê tổng quan -->
 <div class="row">
-    <div class="col-md-3">
+
+    <div class="col-md-4">
+        <!-- Quick Actions -->
+        <div class="box box-default">
+            <div class="box-header with-border">
+                <h3 class="box-title"><i class="fa fa-cogs"></i> Thao tác nhanh</h3>
+            </div>
+            <div class="box-body">
+                <a href="{{ admin_url('daily-task-progress/daily') }}" class="btn btn-primary">
+                    <i class="fa fa-calendar"></i> Xem theo ngày
+                </a>
+                <a href="{{ admin_url('daily-tasks') }}" class="btn btn-default">
+                    <i class="fa fa-tasks"></i> Quản lý công việc
+                </a>
+                <button type="button" class="btn btn-info" onclick="window.location.reload()">
+                    <i class="fa fa-refresh"></i> Làm mới
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-2">
         <div class="info-box">
             <span class="info-box-icon bg-blue"><i class="fa fa-users"></i></span>
             <div class="info-box-content">
@@ -12,7 +33,7 @@
         </div>
     </div>
     
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="info-box">
             <span class="info-box-icon bg-green"><i class="fa fa-check"></i></span>
             <div class="info-box-content">
@@ -23,7 +44,7 @@
         </div>
     </div>
     
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="info-box">
             <span class="info-box-icon bg-yellow"><i class="fa fa-tasks"></i></span>
             <div class="info-box-content">
@@ -33,7 +54,7 @@
         </div>
     </div>
     
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="info-box">
             <span class="info-box-icon 
                 @if($overallCompletionRate >= 80) bg-green
@@ -137,6 +158,7 @@
     
     <!-- Hoạt động gần đây -->
     <div class="col-md-4">
+
         <div class="box box-success">
             <div class="box-header with-border">
                 <h3 class="box-title"><i class="fa fa-clock-o"></i> Hoạt động gần đây</h3>
@@ -178,28 +200,6 @@
                         <i class="fa fa-info-circle"></i> Chưa có hoạt động nào
                     </p>
                 @endforelse
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Quick Actions -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="box box-default">
-            <div class="box-header with-border">
-                <h3 class="box-title"><i class="fa fa-cogs"></i> Thao tác nhanh</h3>
-            </div>
-            <div class="box-body">
-                <a href="{{ admin_url('daily-task-progress/daily') }}" class="btn btn-primary">
-                    <i class="fa fa-calendar"></i> Xem theo ngày
-                </a>
-                <a href="{{ admin_url('daily-tasks') }}" class="btn btn-default">
-                    <i class="fa fa-tasks"></i> Quản lý công việc
-                </a>
-                <button type="button" class="btn btn-info" onclick="window.location.reload()">
-                    <i class="fa fa-refresh"></i> Làm mới
-                </button>
             </div>
         </div>
     </div>

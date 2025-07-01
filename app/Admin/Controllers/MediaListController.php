@@ -268,6 +268,7 @@ class MediaListController extends Controller
         );
 
         $form->text('media_url', 'Link ảnh');
+        $form->text('local_url', 'Link ảnh nội bộ');
         $form->text('media_order', 'Bộ ảnh');
         $form->select('type', 'Loại media')->options([
             1 => 'Hình ảnh',
