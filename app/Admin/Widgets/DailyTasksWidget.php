@@ -28,6 +28,9 @@ class DailyTasksWidget extends Widget
         return <<<SCRIPT
             
             $(function() {
+                
+                $('[data-toggle="tooltip"]').tooltip();
+
                 var scriptConfig = $scriptVars;
                 var currentAjaxRequest = null;
                 var modalSaved = false;
