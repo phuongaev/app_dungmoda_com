@@ -5,7 +5,6 @@ namespace App\Admin\Controllers;
 
 use App\Models\DailyTask;
 use App\Models\UserTaskCompletion;
-
 use Encore\Admin\Controllers\AdminController;
 use Illuminate\Http\Request;
 use Encore\Admin\Facades\Admin;
@@ -21,7 +20,10 @@ class DailyTaskAjaxController extends AdminController
         try {
             $user = Admin::user();
             if (!$user) {
-                return response()->json(['success' => false, 'message' => 'Không tìm thấy người dùng đăng nhập.'], 401);
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Không tìm thấy người dùng đăng nhập.'
+                ], 401);
             }
 
             $taskId = $request->input('task_id');
@@ -29,7 +31,14 @@ class DailyTaskAjaxController extends AdminController
             $notes = $request->input('notes', '');
             $today = Carbon::today();
 
-            $task = DailyTask::findOrFail($taskId);
+            // Validate task exists
+            $task = DailyTask::find($taskId);
+            if (!$task) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không tìm thấy công việc này.'
+                ], 404);
+            }
 
             $attributes = [
                 'daily_task_id' => $taskId,
@@ -41,29 +50,35 @@ class DailyTaskAjaxController extends AdminController
                 // Nếu là 'hoàn thành', tìm hoặc tạo mới và cập nhật
                 $completion = UserTaskCompletion::firstOrCreate($attributes);
                 
+                $completionTime = now();
                 $completion->update([
                     'status' => 'completed',
-                    'completed_at_time' => now(),
+                    'completed_at_time' => $completionTime,
                     'notes' => $notes
                 ]);
 
                 return response()->json([
                     'success' => true,
                     'message' => "Đã hoàn thành: {$task->title}",
-                    'completion_time' => now()->format('H:i')
+                    'completion_time' => $completionTime->format('H:i'),
+                    'task_id' => $taskId
                 ]);
             } else {
+                // Nếu bỏ check, xóa completion
                 UserTaskCompletion::where($attributes)->delete();
+                
                 return response()->json([
                     'success' => true,
-                    'message' => "Đã bỏ đánh dấu: {$task->title}"
+                    'message' => "Đã bỏ đánh dấu: {$task->title}",
+                    'task_id' => $taskId
                 ]);
             }
 
         } catch (\Exception $e) {
+            \Log::error('Daily Task Toggle Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Server Error: ' . $e->getMessage()
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -76,14 +91,24 @@ class DailyTaskAjaxController extends AdminController
         try {
             $user = Admin::user();
             if (!$user) {
-                return response()->json(['success' => false, 'message' => 'Không tìm thấy người dùng đăng nhập.'], 401);
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Không tìm thấy người dùng đăng nhập.'
+                ], 401);
             }
 
             $taskId = $request->input('task_id');
             $notes = $request->input('notes', '');
             $today = Carbon::today();
 
-            $task = DailyTask::findOrFail($taskId);
+            // Validate task exists
+            $task = DailyTask::find($taskId);
+            if (!$task) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không tìm thấy công việc này.'
+                ], 404);
+            }
 
             $completion = UserTaskCompletion::firstOrCreate(
                 [
@@ -92,7 +117,7 @@ class DailyTaskAjaxController extends AdminController
                     'completion_date' => $today
                 ],
                 [
-                    'status' => 'skipped' 
+                    'status' => 'skipped' // Trạng thái mặc định khi chỉ thêm ghi chú
                 ]
             );
 
@@ -100,13 +125,16 @@ class DailyTaskAjaxController extends AdminController
 
             return response()->json([
                 'success' => true,
-                'message' => 'Đã cập nhật ghi chú!'
+                'message' => 'Đã cập nhật ghi chú!',
+                'task_id' => $taskId,
+                'notes' => $notes
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('Daily Task Note Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Server Error: ' . $e->getMessage()
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -116,89 +144,80 @@ class DailyTaskAjaxController extends AdminController
      */
     public function getStats(Request $request)
     {
-        $userId = Admin::user()->id;
-        $date = $request->input('date', Carbon::today());
+        try {
+            $user = Admin::user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Không tìm thấy người dùng đăng nhập.'
+                ], 401);
+            }
 
-        // Get user roles
-        $userRoles = Admin::user()->roles->pluck('slug')->toArray();
+            $userId = $user->id;
+            $date = $request->input('date', Carbon::today());
+            $userRoles = $user->roles->pluck('slug')->toArray();
 
-        // Get tasks for the date
-        $tasks = DailyTask::with(['completions' => function($query) use ($userId, $date) {
-            $query->where('user_id', $userId)->where('completion_date', $date);
-        }])
-        ->where('is_active', 1)
-        ->get()
-        ->filter(function($task) use ($userId, $userRoles) {
-            return $task->isAssignedToUser($userId, $userRoles);
-        });
-
-        $totalTasks = $tasks->count();
-        $completedTasks = $tasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-        })->count();
-
-        $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
-
-        return response()->json([
-            'total_tasks' => $totalTasks,
-            'completed_tasks' => $completedTasks,
-            'completion_rate' => $completionRate,
-            'date' => $date
-        ]);
-    }
-
-    /**
-     * Get weekly completion report
-     */
-    public function getWeeklyReport(Request $request)
-    {
-        $userId = Admin::user()->id;
-        $startDate = Carbon::now()->startOfWeek();
-        $endDate = Carbon::now()->endOfWeek();
-
-        $weeklyData = [];
-
-        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
-            $dailyTasks = DailyTask::with(['completions' => function($query) use ($userId, $date) {
-                $query->where('user_id', $userId)->where('completion_date', $date->toDateString());
+            // Get tasks for the date
+            $tasks = DailyTask::with(['completions' => function($query) use ($userId, $date) {
+                $query->where('user_id', $userId)->where('completion_date', $date);
             }])
             ->where('is_active', 1)
             ->get()
-            ->filter(function($task) use ($userId, $date) {
-                $userRoles = Admin::user()->roles->pluck('slug')->toArray();
-                return $task->isActiveToday() && $task->isAssignedToUser($userId, $userRoles);
+            ->filter(function($task) use ($userId, $userRoles) {
+                return $this->isTaskAssignedToUser($task, $userId, $userRoles);
             });
 
-            $totalTasks = $dailyTasks->count();
-            $completedTasks = $dailyTasks->filter(function($task) {
-                return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
+            $totalTasks = $tasks->count();
+            $completedTasks = $tasks->filter(function($task) {
+                return $task->completions->isNotEmpty() && 
+                       $task->completions->first()->status === 'completed';
             })->count();
 
-            $weeklyData[] = [
-                'date' => $date->format('Y-m-d'),
-                'day_name' => $date->format('l'),
-                'day_name_vi' => $this->getDayNameVi($date->format('l')),
-                'total_tasks' => $totalTasks,
-                'completed_tasks' => $completedTasks,
-                'completion_rate' => $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0
-            ];
-        }
+            $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
 
-        return response()->json($weeklyData);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_tasks' => $totalTasks,
+                    'completed_tasks' => $completedTasks,
+                    'completion_rate' => $completionRate,
+                    'date' => $date
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Daily Task Stats Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
-    private function getDayNameVi($dayName)
+    /**
+     * Kiểm tra xem task có được assign cho user không
+     */
+    private function isTaskAssignedToUser($task, $userId, $userRoles)
     {
-        $days = [
-            'Monday' => 'Thứ 2',
-            'Tuesday' => 'Thứ 3',
-            'Wednesday' => 'Thứ 4',
-            'Thursday' => 'Thứ 5',
-            'Friday' => 'Thứ 6',
-            'Saturday' => 'Thứ 7',
-            'Sunday' => 'Chủ nhật'
-        ];
+        // Nếu không có assigned_users và assigned_roles thì assign cho tất cả
+        if (empty($task->assigned_users) && empty($task->assigned_roles)) {
+            return true;
+        }
 
-        return $days[$dayName] ?? $dayName;
+        // Kiểm tra assigned_users
+        if (!empty($task->assigned_users) && in_array($userId, $task->assigned_users)) {
+            return true;
+        }
+
+        // Kiểm tra assigned_roles
+        if (!empty($task->assigned_roles)) {
+            foreach ($userRoles as $role) {
+                if (in_array($role, $task->assigned_roles)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

@@ -15,8 +15,8 @@ class DailyTasksWidget extends Widget
 
     public function script()
     {
-        $toggleUrl = admin_url('daily-tasks/ajax/toggle-completion');
-        $addNoteUrl = admin_url('daily-tasks/ajax/add-note');
+        $toggleUrl = admin_url('daily-tasks/toggle-completion');
+        $addNoteUrl = admin_url('daily-tasks/add-note');
         
         // Dùng hàm json_encode để truyền biến PHP vào JS một cách an toàn
         $scriptVars = json_encode([
@@ -125,6 +125,15 @@ class DailyTasksWidget extends Widget
                         $.ajax(ajaxRequest);
                     }
                 });
+
+                // --- CHẾ ĐỘ TẬP TRUNG ---
+                $('#focus-mode-toggle').on('change', function() {
+                    if ($(this).is(':checked')) {
+                        $('.task-completed').slideUp();
+                    } else {
+                        $('.task-completed').slideDown();
+                    }
+                });
                 
                 // --- SỰ KIỆN NÚT "THÊM GHI CHÚ" (Tương tự, nhưng đơn giản hơn) ---
                 $('.add-note-btn').on('click', function() {
@@ -216,6 +225,11 @@ class DailyTasksWidget extends Widget
             return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
         });
 
+        $groupedTasks = $tasks->groupBy(function($task) {
+            // Gom nhóm theo tên category, nếu không có thì cho vào nhóm "Chung"
+            return optional($task->category)->name ?? 'Công việc chung';
+        });
+
         $totalTasks = $tasks->count();
         $completedTasks = $tasks->filter(function($task) {
             return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
@@ -224,6 +238,7 @@ class DailyTasksWidget extends Widget
         $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
 
         $data = [
+            'groupedTasks' => $groupedTasks,
             'tasks' => $tasks,
             'totalTasks' => $totalTasks,
             'completedTasks' => $completedTasks,

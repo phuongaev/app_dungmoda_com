@@ -97,8 +97,7 @@ Route::group([
     });
     
     // AJAX Routes for task completion
-    $router->post('daily-tasks/ajax/toggle-completion', 'DailyTaskAjaxController@toggleCompletion');
-    $router->post('daily-tasks/ajax/add-note', 'DailyTaskAjaxController@addNote');
-    $router->get('daily-tasks/ajax/stats', 'DailyTaskAjaxController@getStats');
-    $router->get('daily-tasks/ajax/weekly-report', 'DailyTaskAjaxController@getWeeklyReport');
+    $router->post('daily-tasks/toggle-completion', 'DailyTaskAjaxController@toggleCompletion');
+    $router->post('daily-tasks/add-note', 'DailyTaskAjaxController@addNote');
+    $router->get('daily-tasks/stats', 'DailyTaskAjaxController@getStats');
 });

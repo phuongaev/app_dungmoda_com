@@ -66,7 +66,7 @@ class DailyTaskProgressController extends Controller
     protected function getTodayProgressData($today)
     {
         // Lấy tất cả users
-        $users = Administrator::with(['roles'])->orderBy('name')->get();
+        $users = Administrator::where('is_active', 1)->with(['roles'])->orderBy('name')->get();
         
         $totalUsers = $users->count();
         $totalCompletedUsers = 0;

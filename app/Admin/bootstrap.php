@@ -25,5 +25,6 @@ Use App\Admin\Extensions\Form\CKEditor;
 Form::forget(['map', 'editor']);
 // Form::extend('ckeditor', CKEditor::class);
 Admin::css('/assets/css/main.css');
+// Admin::css('/assets/js/main.js');
 // Admin::js('/assets/js/app.js');
 // Admin::js('/assets/js/label.js');

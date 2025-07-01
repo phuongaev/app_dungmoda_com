@@ -194,17 +194,21 @@ div#kt_ecommerce_sales_table_wrapper::-webkit-scrollbar {
 }
 
 
+
+/* CUSTOM CSS */
 .user-status-active {
-    color: #00a65a;
-    font-weight: bold;
+  color: #00a65a;
+  font-weight: bold;
 }
 
 .user-status-inactive {
-    color: #dd4b39;
-    font-weight: bold;
+  color: #dd4b39;
+  font-weight: bold;
 }
 
 .toggle-status-btn {
-    cursor: pointer;
-    margin-left: 10px;
+  cursor: pointer;
+  margin-left: 10px;
 }
+
+
