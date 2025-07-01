@@ -115,7 +115,47 @@ class AttendanceController extends Controller
             })
             ->sortable();
 
-        $grid->column('total_work_time', __('Thời gian làm'));
+        $grid->column('total_work_time', __('Thời gian làm'))
+            ->display(function () {
+                // Nếu đã có giá trị work_hours/work_minutes được lưu
+                if ($this->work_hours || $this->work_minutes) {
+                    return sprintf('%02d:%02d', $this->work_hours, $this->work_minutes);
+                }
+                
+                // Tính toán trực tiếp từ check_in_time và check_out_time
+                if ($this->check_in_time && $this->check_out_time) {
+                    $checkIn = is_string($this->check_in_time) 
+                        ? \Carbon\Carbon::parse($this->check_in_time) 
+                        : $this->check_in_time;
+                        
+                    $checkOut = is_string($this->check_out_time) 
+                        ? \Carbon\Carbon::parse($this->check_out_time) 
+                        : $this->check_out_time;
+                        
+                    $diff = $checkOut->diff($checkIn);
+                    $hours = $diff->h + ($diff->days * 24);
+                    $minutes = $diff->i;
+                    
+                    return sprintf('%02d:%02d', $hours, $minutes);
+                }
+                
+                // Nếu đang trong ca (chưa checkout)
+                if ($this->check_in_time && !$this->check_out_time) {
+                    $checkIn = is_string($this->check_in_time) 
+                        ? \Carbon\Carbon::parse($this->check_in_time) 
+                        : $this->check_in_time;
+                        
+                    $diff = now()->diff($checkIn);
+                    $hours = $diff->h + ($diff->days * 24);
+                    $minutes = $diff->i;
+                    
+                    return sprintf('<span class="label label-warning">%02d:%02d (đang làm)</span>', $hours, $minutes);
+                }
+                
+                return '<span class="text-muted">--:--</span>';
+            })
+            ->sortable();
+            
         $grid->column('status', __('Trạng thái'))->label([
             'checked_in' => 'success',
             'checked_out' => 'primary',
@@ -181,9 +221,24 @@ class AttendanceController extends Controller
 
         // Auto calculate work time when saving
         $form->saving(function (Form $form) {
-            $model = $form->model();
-            if ($model->check_in_time && $model->check_out_time) {
-                $model->calculateWorkTime();
+            // Lấy dữ liệu từ form
+            $checkInTime = $form->check_in_time;
+            $checkOutTime = $form->check_out_time;
+            
+            // Nếu có cả giờ vào và giờ ra, tính thời gian làm việc
+            if ($checkInTime && $checkOutTime) {
+                $checkIn = \Carbon\Carbon::parse($checkInTime);
+                $checkOut = \Carbon\Carbon::parse($checkOutTime);
+                
+                $diff = $checkOut->diff($checkIn);
+                $form->work_hours = $diff->h + ($diff->days * 24);
+                $form->work_minutes = $diff->i;
+                
+                // Cập nhật status nếu có checkout
+                $form->status = 'checked_out';
+            } elseif ($checkInTime && !$checkOutTime) {
+                // Nếu chỉ có check in, set status là checked_in
+                $form->status = 'checked_in';
             }
         });
 
@@ -337,15 +392,4 @@ class AttendanceController extends Controller
         ]);
     }
 
-    // Test webhook endpoint
-    public function testWebhook()
-    {
-        $result = $this->webhookService->testWebhook();
-        
-        return response()->json([
-            'success' => $result['success'],
-            'message' => $result['success'] ? 'Webhook test successful' : 'Webhook test failed',
-            'details' => $result
-        ]);
-    }
 }

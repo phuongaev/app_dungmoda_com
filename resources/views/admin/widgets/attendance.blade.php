@@ -102,7 +102,7 @@
         <!-- Buttons chấm công -->
         <div class="row">
             <div class="col-md-6">
-                <button type="button" class="btn btn-success btn-block" id="checkin-btn" 
+                <button type="button" class="btn btn-success btn-block btn-lg" id="checkin-btn" 
                         {{ !$canCheckIn ? 'disabled' : '' }}>
                     <i class="fa fa-sign-in"></i> 
                     @if($currentSession)
@@ -113,7 +113,7 @@
                 </button>
             </div>
             <div class="col-md-6">
-                <button type="button" class="btn btn-danger btn-block" id="checkout-btn"
+                <button type="button" class="btn btn-danger btn-block btn-lg" id="checkout-btn"
                         {{ !$canCheckOut ? 'disabled' : '' }}>
                     <i class="fa fa-sign-out"></i> 
                     @if($currentSession)
@@ -126,6 +126,7 @@
         </div>
     </div>
 </div>
+
 
 <script>
 $(document).ready(function() {

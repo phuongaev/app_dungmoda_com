@@ -36,9 +36,41 @@ class Attendance extends Model
 
     public function getTotalWorkTimeAttribute()
     {
+        // Nếu đã có giá trị work_hours/work_minutes được lưu, sử dụng nó
         if ($this->work_hours || $this->work_minutes) {
             return sprintf('%02d:%02d', $this->work_hours, $this->work_minutes);
         }
+        
+        // Nếu chưa có, tính toán trực tiếp từ check_in_time và check_out_time
+        if ($this->check_in_time && $this->check_out_time) {
+            $checkIn = $this->check_in_time instanceof \Carbon\Carbon 
+                ? $this->check_in_time 
+                : \Carbon\Carbon::parse($this->check_in_time);
+                
+            $checkOut = $this->check_out_time instanceof \Carbon\Carbon 
+                ? $this->check_out_time 
+                : \Carbon\Carbon::parse($this->check_out_time);
+                
+            $diff = $checkOut->diff($checkIn);
+            $hours = $diff->h + ($diff->days * 24);
+            $minutes = $diff->i;
+            
+            return sprintf('%02d:%02d', $hours, $minutes);
+        }
+        
+        // Nếu đang trong ca (chưa checkout)
+        if ($this->check_in_time && !$this->check_out_time) {
+            $checkIn = $this->check_in_time instanceof \Carbon\Carbon 
+                ? $this->check_in_time 
+                : \Carbon\Carbon::parse($this->check_in_time);
+                
+            $diff = now()->diff($checkIn);
+            $hours = $diff->h + ($diff->days * 24);
+            $minutes = $diff->i;
+            
+            return sprintf('%02d:%02d (đang làm)', $hours, $minutes);
+        }
+        
         return '00:00';
     }
 
