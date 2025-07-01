@@ -19,8 +19,8 @@ class DashboardController extends Controller
         $data = $this->getDetailedPackagesData();
         
         return $content
-            ->title('Dashboard Kiện hàng')
-            ->description('Kiện hàng cần xử lý')
+            ->title('Thống kê Kiện hàng')
+            ->description('Thống kê tổng quan kiện hàng')
             ->row(function (Row $row) use ($data) {
                 $row->column(12, function (Column $column) use ($data) {
                     $column->append(view('admin.dashboard.packages-full', $data));
@@ -103,10 +103,14 @@ class DashboardController extends Controller
         $stats['completion_rate'] = $stats['total_all'] > 0 ? round(($stats['delivered'] / $stats['total_all']) * 100, 1) : 0;
 
         // Thống kê theo đối tác (chỉ tổng số kiện)
-        $partnerTotals = Package::selectRaw('shipping_partner, count(*) as total')
-            ->groupBy('shipping_partner')
-            ->pluck('total', 'shipping_partner')
-            ->toArray();
+        // $partnerTotals = Package::selectRaw('shipping_partner, count(*) as total')
+        //     ->groupBy('shipping_partner')
+        //     ->pluck('total', 'shipping_partner')
+        //     ->toArray();
+        $partnerTotals = Package::selectRaw('shipping_partner, SUM(weight) as total')
+                    ->groupBy('shipping_partner')
+                    ->pluck('total', 'shipping_partner')
+                    ->toArray();
 
         // Thống kê theo tuần (7 ngày gần đây) - tất cả trạng thái
         $weeklyStats = [];

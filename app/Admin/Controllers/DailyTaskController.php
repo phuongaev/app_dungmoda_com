@@ -89,6 +89,7 @@ class DailyTaskController extends Controller
         $grid = new Grid(new DailyTask());
 
         $grid->column('id', __('ID'))->sortable();
+        $grid->model()->orderBy('id', 'desc');
         
         $grid->column('title', __('Tiêu đề'))
             ->display(function ($title) {

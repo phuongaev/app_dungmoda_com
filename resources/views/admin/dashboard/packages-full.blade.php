@@ -144,7 +144,7 @@
             <div class="box-header with-border">
                 <h3 class="box-title">
                     <i class="fa fa-pie-chart"></i>
-                    Tỷ lệ kiện hàng theo đối tác vận chuyển
+                    Tỷ lệ cân nặng theo đối tác vận chuyển
                 </h3>
             </div>
             <div class="box-body">
@@ -187,7 +187,7 @@
                                             <a href="{{ admin_url('packages?shipping_partner[]=' . $partner) }}" 
                                                class="badge" 
                                                style="background-color: {{ $color }}; text-decoration: none;">
-                                               {{ $total }} kiện ({{ $percentage }}%)
+                                               {{ $total }} kg ({{ $percentage }}%)
                                             </a>
                                         </span>
                                         <div class="clearfix"></div>
@@ -196,7 +196,7 @@
                                 
                                 <hr>
                                 <div class="total-summary">
-                                    <strong>Tổng cộng: {{ $totalAll }} kiện hàng</strong>
+                                    <strong>Tổng cộng: {{ $totalAll }} kg</strong>
                                 </div>
                             </div>
                         </div>

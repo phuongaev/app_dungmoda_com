@@ -15,8 +15,8 @@ class DailyTasksWidget extends Widget
 
     public function script()
     {
-        $toggleUrl = admin_url('daily-tasks/toggle-completion');
-        $addNoteUrl = admin_url('daily-tasks/add-note');
+        $toggleUrl = admin_url('daily-tasks/ajax/toggle-completion');
+        $addNoteUrl = admin_url('daily-tasks/ajax/add-note');
         
         // Dùng hàm json_encode để truyền biến PHP vào JS một cách an toàn
         $scriptVars = json_encode([
