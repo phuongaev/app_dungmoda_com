@@ -108,6 +108,7 @@ class DashboardController extends Controller
         //     ->pluck('total', 'shipping_partner')
         //     ->toArray();
         $partnerTotals = Package::selectRaw('shipping_partner, SUM(weight) as total')
+                    ->where('created_at', '>=', now()->subDays(30))
                     ->groupBy('shipping_partner')
                     ->pluck('total', 'shipping_partner')
                     ->toArray();
