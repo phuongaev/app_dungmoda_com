@@ -28,7 +28,8 @@ class CashFlowController extends AdminController
     {
         $grid = new Grid(new Cash());
         $grid = $grid->with(['labels']);
-        $grid->model()->orderBy('id', 'desc');
+        // $grid->model()->orderBy('id', 'desc');
+        $grid->model()->orderBy('time', 'desc');
         $labels = Label::query()->orderBy('id', 'desc')->get(['id','name']);
 
         // column id
@@ -63,6 +64,7 @@ class CashFlowController extends AdminController
         // end column note
         // column time
         $grid->column('time', __('Thời gian'))
+            ->sortable()
             ->filter('range', 'datetime')
             ->width(140);
         // and column time

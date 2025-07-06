@@ -28,6 +28,9 @@ Route::group([
     $router->post('cash/update/{id}','CashFlowController@custom_update');
     $router->resource('labels', 'LabelController');
 
+    $router->get('cashflow-statistics', 'CashFlowStatisticsController@index')
+    ->name('admin.cashflow.statistics');
+
 
     ############# BaseStatusController #############
     $router->resource('base-status', 'BaseStatusController');
@@ -100,4 +103,14 @@ Route::group([
     $router->post('daily-tasks/ajax/toggle-completion', 'DailyTaskAjaxController@toggleCompletion');
     $router->post('daily-tasks/ajax/add-note', 'DailyTaskAjaxController@addNote');
     $router->get('daily-tasks/ajax/stats', 'DailyTaskAjaxController@getStats');
+
+
+    ############# OrderController #############
+    $router->resource('orders', 'OrderController');
+    $router->get('orders/sync', 'OrderController@syncOrders')->name('orders.sync');
+    $router->get('orders/resume-sync', 'OrderController@resumeSync')->name('orders.resume-sync');
+    $router->get('orders/pause-sync', 'OrderController@pauseSync')->name('orders.pause-sync');
+
+
+
 });

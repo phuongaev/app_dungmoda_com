@@ -14,6 +14,7 @@ use App\Models\Package;
 
 use App\Admin\Widgets\DailyTasksWidget;
 use App\Admin\Widgets\OnlineEmployeesWidget;
+use App\Admin\Widgets\CashFlowWidget;
 
 class HomeController extends Controller
 {
@@ -37,25 +38,26 @@ class HomeController extends Controller
                     $column->append(new OnlineEmployeesWidget());
 
                     // Kiện hàng cần xử lý
-                    // if (in_array('ceo', $userRoles)) {
-                    //     $column->append($this->packagesWidget());
-                    // }
+                    if (in_array('ceo', $userRoles)) {
+                        // $column->append($this->packagesWidget());
+                        $column->append(new CashFlowWidget());
+                    }
                 });
                 
                 // Đơn hàng cần xử lý
                 $row->column(6, function (Column $column) {
                     $column->append(new DailyTasksWidget());
+
                 });             
             })
 
 
             // Row 2: 
             ->row(function (Row $row) {
-                
-                    $row->column(6, function (Column $column) {
-                        
-                    });
-                
+                $row->column(12, function (Column $column) {
+                    
+                });
+
             });
 
    
