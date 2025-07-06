@@ -105,9 +105,18 @@ Route::group([
 
 
     ############# OrderController #############
-    $router->resource('orders', 'OrderController');
-    $router->get('orders/sync', 'OrderController@syncOrders')->name('orders.sync');
-    $router->get('orders/resume-sync', 'OrderController@resumeSync')->name('orders.resume-sync');
-    $router->get('orders/pause-sync', 'OrderController@pauseSync')->name('orders.pause-sync');
+    $router->resource('pos-orders', 'PosOrderController');
+    
+    // Additional routes for POS Orders
+    $router->post('pos-orders/import', 'PosOrderController@import')->name('pos-orders.import');
+    $router->get('pos-orders/export', 'PosOrderController@export')->name('pos-orders.export');
+    $router->post('pos-orders/bulk-update-status', 'PosOrderController@bulkUpdateStatus')->name('pos-orders.bulk-update-status');
+
+    // POS Order Statuses routes
+    $router->resource('pos-order-statuses', 'PosOrderStatusController');
+    
+    // Additional routes for statuses
+    $router->get('pos-order-statuses/refresh-cache', 'PosOrderStatusController@refreshCache')->name('pos-order-statuses.refresh-cache');
+
 
 });
