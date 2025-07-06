@@ -28,8 +28,7 @@ Route::group([
     $router->post('cash/update/{id}','CashFlowController@custom_update');
     $router->resource('labels', 'LabelController');
 
-    $router->get('cashflow-statistics', 'CashFlowStatisticsController@index')
-    ->name('admin.cashflow.statistics');
+    $router->get('cashflow-statistics', 'CashFlowStatisticsController@index')->name('admin.cashflow.statistics');
 
 
     ############# BaseStatusController #############
@@ -110,7 +109,5 @@ Route::group([
     $router->get('orders/sync', 'OrderController@syncOrders')->name('orders.sync');
     $router->get('orders/resume-sync', 'OrderController@resumeSync')->name('orders.resume-sync');
     $router->get('orders/pause-sync', 'OrderController@pauseSync')->name('orders.pause-sync');
-
-
 
 });
