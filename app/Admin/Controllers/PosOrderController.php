@@ -28,8 +28,8 @@ class PosOrderController extends Controller
     public function index(Content $content)
     {
         return $content
-            ->header(trans('admin.index'))
-            ->description(trans('admin.description'))
+            ->header(trans('Quản lý đơn hàng'))
+            ->description(trans('Thông tin cơ bản các đơn hàng'))
             ->body($this->grid());
     }
 
@@ -86,13 +86,13 @@ class PosOrderController extends Controller
     {
         $grid = new Grid(new PosOrder());
 
-        $grid->model()->orderBy('created_at', 'desc');
+        $grid->model()->orderBy('inserted_at', 'desc');
 
         // Tối ưu query với select specific columns và relationship
         $grid->model()->select([
             'id', 'order_id', 'customer_name', 'customer_phone', 
             'cod', 'status', 'status_name', 'order_sources_name', 
-            'total_quantity', 'created_at', 'pos_updated_at'
+            'total_quantity', 'created_at', 'pos_updated_at', 'inserted_at', 'order_link'
         ])->withStatusInfo();
 
         // Header tools
@@ -131,10 +131,26 @@ class PosOrderController extends Controller
             // ]);
 
             // Filter theo page_id
-            // $filter->equal('page_id', 'Page ID');
+            $filter->equal('page_id', 'Page ID');
 
             // Filter theo thời gian - sử dụng index status_created
-            $filter->between('created_at', 'Thời gian tạo')->datetime();
+            // $filter->between('created_at', 'Thời gian tạo')->datetime();
+
+            // Filter theo thời gian - sử dụng index inserted_at
+            $filter->between('inserted_at', 'Thời gian tạo')->datetime();
+
+            // Quick filters
+            $filter->scope('today', 'Hôm nay')->where(function ($query) {
+                $query->whereDate('inserted_at', today());
+            });
+            
+            $filter->scope('this_week', 'Tuần này')->where(function ($query) {
+                $query->whereBetween('inserted_at', [
+                    now()->startOfWeek(),
+                    now()->endOfWeek()
+                ]);
+            });
+
         });
 
         // Columns
@@ -179,14 +195,32 @@ class PosOrderController extends Controller
                 'Zalo' => 'info',
                 'Phone' => 'warning'
             ])
-            ->width(80);
+            ->width(90);
 
-        $grid->column('created_at', 'Ngày tạo')
+        // Page ID
+        // $grid->column('page_id', 'Page Id')
+        //     ->copyable()
+        //     ->width(170);
+
+        // Nút mở xem link đơn hàng trên POS
+        $grid->column('order_link', 'Link')
+            ->display(function ($orderLink) {
+                if (!$orderLink) {
+                    return '<i class="fa fa-link text-muted" title="Không có link"></i>';
+                }
+                
+                return '<a href="' . $orderLink . '" target="_blank" class="text-default" title="Mở đơn hàng">
+                    <i class="fa fa-external-link"></i>
+                </a>';
+            })
+            ->width(55);
+
+        $grid->column('inserted_at', 'Ngày tạo')
             ->display(function ($createdAt) {
                 return date('d/m/Y H:i', strtotime($createdAt));
             })
             ->sortable()
-            ->width(130);
+            ->width(150);
 
         // Actions
         $grid->actions(function ($actions) {
@@ -208,10 +242,12 @@ class PosOrderController extends Controller
         // });
 
         // Pagination
-        $grid->paginate(50);
+        $grid->paginate(20);
 
         // Export
         // $grid->exporter(new PosOrderExporter());
+        $grid->disableCreateButton();
+        $grid->disableExport();
 
         return $grid;
     }

@@ -85,8 +85,7 @@ class CustomerController extends Controller
     protected function grid()
     {
         $grid = new Grid(new Customer);
-        // Sắp xếp theo id giảm dần (DESC)
-        $grid->model()->orderBy('id', 'desc');
+        $grid->model()->orderBy('created_at', 'desc');
 
         // Eager load các quan hệ cho filter theo tên
         $grid->model()->with(['fanpage', 'profile', 'status']);

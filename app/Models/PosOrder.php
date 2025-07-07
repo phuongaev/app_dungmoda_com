@@ -32,13 +32,15 @@ class PosOrder extends Model
         'conversation_id',
         'post_id',
         'time_send_partner',
-        'pos_updated_at'
+        'pos_updated_at',
+        'inserted_at'
     ];
 
     protected $casts = [
         'cod' => 'decimal:2',
         'time_send_partner' => 'datetime',
         'pos_updated_at' => 'datetime',
+        'inserted_at' => 'datetime',
     ];
 
     // Scope cho tìm kiếm tối ưu
@@ -87,6 +89,30 @@ class PosOrder extends Model
             return substr($phone, 0, 4) . '***' . substr($phone, -3);
         }
         return $phone;
+    }
+
+    // Scope cho filter theo thời gian inserted_at
+    public function scopeByInsertedAtRange($query, $startDate, $endDate)
+    {
+        if ($startDate && $endDate) {
+            return $query->whereBetween('inserted_at', [$startDate, $endDate]);
+        }
+        return $query;
+    }
+    
+    // Scope cho filter theo thời gian trong ngày hôm nay
+    public function scopeToday($query)
+    {
+        return $query->whereDate('inserted_at', today());
+    }
+
+    // Scope cho filter theo thời gian trong tuần này
+    public function scopeThisWeek($query)
+    {
+        return $query->whereBetween('inserted_at', [
+            now()->startOfWeek(),
+            now()->endOfWeek()
+        ]);
     }
 
     // Status constants theo yêu cầu
