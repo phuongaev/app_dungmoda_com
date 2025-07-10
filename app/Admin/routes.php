@@ -5,6 +5,7 @@ use App\Admin\Controllers\CashFlowController;
 use App\Admin\Controllers\ShipmentController;
 use App\Admin\Controllers\AttendanceController;
 use App\Admin\Controllers\DailyTaskProgressController;
+use App\Admin\Controllers\ShiftCalendarController;
 
 Admin::routes();
 
@@ -126,6 +127,13 @@ Route::group([
     $router->get('workflow-histories/by-order/{orderId}', 'WorkflowHistoryController@byOrder')->name('workflow-histories.by-order');
     $router->get('workflow-histories/statistics', 'WorkflowHistoryController@statistics')->name('workflow-histories.statistics');
     $router->delete('workflow-histories/bulk-delete', 'WorkflowHistoryController@bulkDelete')->name('workflow-histories.bulk-delete');
+
+
+    // Ca tối
+    $router->get('shift-calendar', [ShiftCalendarController::class, 'index'])->name('shift_calendar.index');
+    $router->get('shifts/events', [ShiftCalendarController::class, 'events'])->name('shifts.events');
+    $router->post('shifts/update', [ShiftCalendarController::class, 'updateShift'])->name('shifts.update');
+    $router->post('shifts/swap', [ShiftCalendarController::class, 'swap'])->name('shifts.swap');
 
 
 });

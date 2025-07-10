@@ -16,6 +16,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         // $schedule->command('inspire')->hourly();
+        $schedule->command('schedule:assign-monthly-shifts')->monthlyOn(1, '01:00'); // Chạy vào 01:00 ngày 1 hàng tháng
     }
 
     /**

@@ -16,6 +16,8 @@ use App\Admin\Widgets\DailyTasksWidget;
 use App\Admin\Widgets\OnlineEmployeesWidget;
 use App\Admin\Widgets\CashFlowWidget;
 
+use App\Admin\Widgets\ShiftCalendarDashboardWidget;
+
 class HomeController extends Controller
 {
     public function index(Content $content)
@@ -31,23 +33,29 @@ class HomeController extends Controller
 
             // Row 1: Alert kiện hàng (full width)
             ->row(function (Row $row) use ($userRoles) {
-                // Chấm công
+                // Cột 1
                 $row->column(6, function (Column $column) use ($userRoles) {
+                    // Chấm công
                     $column->append($this->attendanceWidget());
 
+                    // Danh sách nhân viên đang làm việc
                     $column->append(new OnlineEmployeesWidget());
 
                     // Kiện hàng cần xử lý
-                    if (in_array('ceo', $userRoles)) {
+                    if (in_array('administrator', $userRoles)) {
                         // $column->append($this->packagesWidget());
                         $column->append(new CashFlowWidget());
+                        
                     }
                 });
                 
-                // Đơn hàng cần xử lý
+                // Cột 2
                 $row->column(6, function (Column $column) {
+                    // Đơn hàng cần xử lý
                     $column->append(new DailyTasksWidget());
 
+                    // Danh sách nhân viên trực ca tối
+                    $column->append(new ShiftCalendarDashboardWidget());
                 });             
             })
 

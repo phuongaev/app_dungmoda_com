@@ -19,7 +19,7 @@ class CreatePosOrderWorkflowHistoryTable extends Migration
             // Foreign key tới pos_orders
             $table->unsignedBigInteger('pos_order_id')->comment('ID đơn hàng');
             
-            // Foreign key tới base_statuses (workflow status)
+            // Workflow status ID - KHÔNG tạo foreign key constraint
             $table->unsignedInteger('workflow_status_id')->comment('ID trạng thái workflow từ base_statuses');
             
             // Workflow ID dạng varchar 55 ký tự - ví dụ: zXFNHnzvXzd3R1ui
@@ -30,9 +30,11 @@ class CreatePosOrderWorkflowHistoryTable extends Migration
             
             $table->timestamps();
             
-            // Foreign key constraints
+            // CHỈ tạo foreign key cho pos_orders (chắc chắn tồn tại)
             $table->foreign('pos_order_id')->references('id')->on('pos_orders')->onDelete('cascade');
-            $table->foreign('workflow_status_id')->references('status_id')->on('base_statuses')->onDelete('cascade');
+            
+            // NOTE: Không tạo foreign key cho base_statuses để tránh lỗi constraint
+            // Sẽ thêm sau khi đảm bảo bảng base_statuses đã có cấu trúc đúng
             
             // Indexes để tối ưu query
             $table->index(['pos_order_id', 'executed_at'], 'idx_order_executed_at');
