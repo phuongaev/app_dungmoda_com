@@ -99,7 +99,7 @@ class ProductController extends Controller
             $form->text('variations_code', 'Mã mẫu mã');
             $form->text('variations_name', 'Thuộc tính');
             $form->text('price', 'Giá bán');
-            $form->text('import_price', 'Giá nhập');
+            // $form->text('import_price', 'Giá nhập');
         });
 
 

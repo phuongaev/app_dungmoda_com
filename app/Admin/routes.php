@@ -118,5 +118,14 @@ Route::group([
     // Additional routes for statuses
     $router->get('pos-order-statuses/refresh-cache', 'PosOrderStatusController@refreshCache')->name('pos-order-statuses.refresh-cache');
 
+    // ===== Workflow History Management =====
+    $router->resource('workflow-histories', 'WorkflowHistoryController', [
+        'except' => ['create', 'store'] // Chỉ cho phép xem và xóa, không tạo mới từ admin
+    ]);
+    // Additional workflow history routes
+    $router->get('workflow-histories/by-order/{orderId}', 'WorkflowHistoryController@byOrder')->name('workflow-histories.by-order');
+    $router->get('workflow-histories/statistics', 'WorkflowHistoryController@statistics')->name('workflow-histories.statistics');
+    $router->delete('workflow-histories/bulk-delete', 'WorkflowHistoryController@bulkDelete')->name('workflow-histories.bulk-delete');
+
 
 });

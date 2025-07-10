@@ -106,12 +106,12 @@ class AttendanceWebhookService
                 ->post($this->webhookUrl, $data);
 
             // Log response để debug
-            Log::info('Attendance webhook sent', [
-                'url' => $this->webhookUrl,
-                'status' => $response->status(),
-                'response' => $response->body(),
-                'data' => $data
-            ]);
+            // Log::info('Attendance webhook sent', [
+            //     'url' => $this->webhookUrl,
+            //     'status' => $response->status(),
+            //     'response' => $response->body(),
+            //     'data' => $data
+            // ]);
 
         } catch (\Exception $e) {
             Log::error('Attendance webhook failed', [
