@@ -5,7 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Encore\Admin\Auth\Database\Administrator;
 use Encore\Admin\Auth\Database\Role;
-use App\Models\EveningShift; // Chúng ta sẽ tạo Model này ở bước tiếp theo
+use App\Models\EveningShift;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 

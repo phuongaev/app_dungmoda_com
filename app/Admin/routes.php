@@ -122,10 +122,18 @@ Route::group([
 
 
     // Ca tối
+    // Main calendar page
     $router->get('shift-calendar', [ShiftCalendarController::class, 'index'])->name('shift_calendar.index');
+    
+    // API endpoints
     $router->get('shifts/events', [ShiftCalendarController::class, 'events'])->name('shifts.events');
+    $router->get('shifts/available-shifts', [ShiftCalendarController::class, 'getAvailableShifts'])->name('shifts.available');
+    $router->get('shifts/available-users', [ShiftCalendarController::class, 'getAvailableUsers'])->name('shifts.available_users');
+    $router->get('shifts/by-date', [ShiftCalendarController::class, 'getShiftsByDate'])->name('shifts.by_date');
     $router->post('shifts/update', [ShiftCalendarController::class, 'updateShift'])->name('shifts.update');
     $router->post('shifts/swap', [ShiftCalendarController::class, 'swap'])->name('shifts.swap');
+    $router->post('shifts/change-person', [ShiftCalendarController::class, 'changeShiftPerson'])->name('shifts.change_person');
+    $router->post('shifts/create', [ShiftCalendarController::class, 'createShift'])->name('shifts.create');
 
 
 });

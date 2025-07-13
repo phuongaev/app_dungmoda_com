@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\EveningShift;
 use Encore\Admin\Auth\Database\Administrator;
+use Encore\Admin\Auth\Database\Role;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +18,12 @@ class ShiftCalendarService
         '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', 
         '#34495e', '#1abc9c', '#e67e22', '#d35400', '#c0392b'
     ];
+
+    /**
+     * Static user colors cache to persist across requests
+     */
+    private static $userColorsCache = [];
+    private static $colorIndex = 0;
 
     /**
      * Get shifts within date range
@@ -34,10 +41,7 @@ class ShiftCalendarService
      */
     public function formatShiftsForCalendar($shifts)
     {
-        $userColors = [];
-        $colorIndex = 0;
-
-        return $shifts->map(function ($shift) use (&$userColors, &$colorIndex) {
+        return $shifts->map(function ($shift) {
             if (!$shift->user) {
                 return null;
             }
@@ -46,20 +50,21 @@ class ShiftCalendarService
             $userName = $shift->user->name;
 
             // Assign color to user if not already assigned
-            if (!isset($userColors[$userId])) {
-                $userColors[$userId] = self::USER_COLORS[$colorIndex % count(self::USER_COLORS)];
-                $colorIndex++;
+            if (!isset(self::$userColorsCache[$userId])) {
+                self::$userColorsCache[$userId] = self::USER_COLORS[self::$colorIndex % count(self::USER_COLORS)];
+                self::$colorIndex++;
             }
 
             return [
                 'id' => $shift->id,
                 'title' => $userName,
                 'start' => $shift->shift_date,
-                'color' => $userColors[$userId],
+                'color' => self::$userColorsCache[$userId],
                 'allDay' => true,
                 'extendedProps' => [
                     'userId' => $userId,
                     'userName' => $userName,
+                    'userColor' => self::$userColorsCache[$userId], // Add explicit color to extendedProps
                     'shiftDate' => Carbon::parse($shift->shift_date)->format('d/m/Y')
                 ]
             ];
@@ -76,11 +81,11 @@ class ShiftCalendarService
 
             $shift = EveningShift::findOrFail($shiftId);
             
-            // Check for conflicts
-            $conflict = $this->checkDateConflict($newDate, $shiftId);
-            if ($conflict) {
-                throw new \Exception('Ngày ' . Carbon::parse($newDate)->format('d/m/Y') . ' đã có người trực.');
-            }
+            // Bỏ check conflict vì cho phép nhiều người cùng ngày
+            // $conflict = $this->checkDateConflict($newDate, $shiftId);
+            // if ($conflict) {
+            //     throw new \Exception('Ngày ' . Carbon::parse($newDate)->format('d/m/Y') . ' đã có người trực.');
+            // }
 
             $shift->shift_date = $newDate;
             $shift->save();
@@ -145,8 +150,19 @@ class ShiftCalendarService
      */
     public function getAvailableShiftsForSwap($excludeId)
     {
+        // Get sale_team role
+        $saleTeamRole = Role::where('slug', 'sale_team')->first();
+        
+        if (!$saleTeamRole) {
+            return collect([]);
+        }
+
+        // Get user IDs with sale_team role
+        $saleTeamUserIds = $saleTeamRole->administrators()->pluck('id')->toArray();
+
         $shifts = EveningShift::with('user')
             ->where('id', '!=', $excludeId)
+            ->whereIn('admin_user_id', $saleTeamUserIds) // Only sale team users
             ->where('shift_date', '>=', Carbon::now()->format('Y-m-d'))
             ->orderBy('shift_date')
             ->get();
@@ -162,7 +178,26 @@ class ShiftCalendarService
     }
 
     /**
-     * Check if date has existing shift (conflict check)
+     * Get count of people working on specific date
+     */
+    public function getShiftCountByDate($date)
+    {
+        return EveningShift::where('shift_date', $date)->count();
+    }
+
+    /**
+     * Get all people working on specific date
+     */
+    public function getShiftsByDate($date)
+    {
+        return EveningShift::with('user')
+            ->where('shift_date', $date)
+            ->get();
+    }
+
+    /**
+     * Check if date has existing shift (for reporting/statistics purposes)
+     * Note: Not used for conflict checking since multiple people can work on same day
      */
     public function checkDateConflict($date, $excludeShiftId = null)
     {
@@ -173,6 +208,23 @@ class ShiftCalendarService
         }
 
         return $query->exists();
+    }
+
+    /**
+     * Get user colors mapping for legend
+     */
+    public function getUserColorsMapping()
+    {
+        return self::$userColorsCache;
+    }
+
+    /**
+     * Clear user colors cache (useful for testing or resetting)
+     */
+    public function clearUserColorsCache()
+    {
+        self::$userColorsCache = [];
+        self::$colorIndex = 0;
     }
 
     /**
@@ -215,10 +267,10 @@ class ShiftCalendarService
     public function createShift($userId, $shiftDate)
     {
         try {
-            // Check for conflicts
-            if ($this->checkDateConflict($shiftDate)) {
-                throw new \Exception('Ngày ' . Carbon::parse($shiftDate)->format('d/m/Y') . ' đã có người trực.');
-            }
+            // Bỏ check conflict vì cho phép nhiều người cùng ngày
+            // if ($this->checkDateConflict($shiftDate)) {
+            //     throw new \Exception('Ngày ' . Carbon::parse($shiftDate)->format('d/m/Y') . ' đã có người trực.');
+            // }
 
             $shift = EveningShift::create([
                 'admin_user_id' => $userId,
@@ -261,6 +313,143 @@ class ShiftCalendarService
             return [
                 'success' => false,
                 'message' => 'Lỗi khi xóa ca trực.'
+            ];
+        }
+    }
+
+    /**
+     * Get all available users for shift assignment (only sale_team role)
+     */
+    public function getAvailableUsers()
+    {
+        try {
+            // Get sale_team role
+            $saleTeamRole = Role::where('slug', 'sale_team')->first();
+            
+            if (!$saleTeamRole) {
+                Log::warning('Sale team role not found');
+                return collect([]);
+            }
+
+            // Get users with sale_team role
+            $users = $saleTeamRole->administrators()
+                ->orderBy('name')
+                ->get()
+                ->map(function ($user) {
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'username' => $user->username
+                    ];
+                });
+            
+            return $users;
+
+        } catch (\Exception $e) {
+            Log::error('Error loading available users: ' . $e->getMessage());
+            return collect([]);
+        }
+    }
+
+    /**
+     * Change the assigned person for a shift
+     */
+    public function changeShiftPerson($shiftId, $newUserId)
+    {
+        try {
+            DB::beginTransaction();
+
+            $shift = EveningShift::findOrFail($shiftId);
+            $oldUserId = $shift->admin_user_id;
+            
+            // Get user names for logging
+            $oldUser = Administrator::find($oldUserId);
+            $newUser = Administrator::find($newUserId);
+            
+            if (!$newUser) {
+                throw new \Exception('Nhân viên được chọn không tồn tại.');
+            }
+
+            // Check if new user has sale_team role
+            $saleTeamRole = Role::where('slug', 'sale_team')->first();
+            if ($saleTeamRole && !$newUser->roles->contains($saleTeamRole->id)) {
+                throw new \Exception('Nhân viên được chọn không thuộc team Sale.');
+            }
+
+            $shift->admin_user_id = $newUserId;
+            $shift->save();
+
+            DB::commit();
+
+            // Log the change
+            Log::info('Shift person changed', [
+                'shift_id' => $shiftId,
+                'date' => $shift->shift_date,
+                'old_user' => $oldUser ? $oldUser->name : 'Unknown',
+                'new_user' => $newUser->name
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Đã thay đổi người trực thành công.',
+                'old_user' => $oldUser ? $oldUser->name : 'Unknown',
+                'new_user' => $newUser->name
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error changing shift person: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Debug: Get current color cache state
+     */
+    public function debugColorCache()
+    {
+        return [
+            'user_colors' => self::$userColorsCache,
+            'color_index' => self::$colorIndex,
+            'total_users' => count(self::$userColorsCache)
+        ];
+    }
+
+    /**
+     * Debug: Check sale team role setup
+     */
+    public function debugSaleTeamRole()
+    {
+        try {
+            $saleTeamRole = Role::where('slug', 'sale_team')->first();
+            
+            if (!$saleTeamRole) {
+                return [
+                    'status' => 'error',
+                    'message' => 'Sale team role not found',
+                    'available_roles' => Role::pluck('name', 'slug')->toArray()
+                ];
+            }
+
+            $users = $saleTeamRole->administrators()->get(['id', 'name', 'username']);
+
+            return [
+                'status' => 'success',
+                'role_id' => $saleTeamRole->id,
+                'role_name' => $saleTeamRole->name,
+                'role_slug' => $saleTeamRole->slug,
+                'users_count' => $users->count(),
+                'users' => $users->toArray()
+            ];
+
+        } catch (\Exception $e) {
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage()
             ];
         }
     }

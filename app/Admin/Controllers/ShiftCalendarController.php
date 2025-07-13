@@ -5,146 +5,262 @@ namespace App\Admin\Controllers;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Layout\Content;
-use App\Models\EveningShift;
+use App\Services\ShiftCalendarService;
+use App\Http\Requests\Admin\ShiftEventsRequest;
+use App\Http\Requests\Admin\UpdateShiftRequest;
+use App\Http\Requests\Admin\SwapShiftRequest;
+use App\Http\Requests\Admin\CreateShiftRequest;
+use App\Http\Requests\Admin\GetAvailableShiftsRequest;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ShiftCalendarController extends AdminController
 {
     protected $title = 'Lịch làm việc ca tối';
+    protected $shiftCalendarService;
 
+    public function __construct(ShiftCalendarService $shiftCalendarService)
+    {
+        $this->shiftCalendarService = $shiftCalendarService;
+    }
+
+    /**
+     * Display calendar page
+     */
     public function index(Content $content)
     {
         $is_admin = Admin::user()->isRole('administrator');
+        
         return $content
             ->title($this->title)
             ->description('Xem và quản lý lịch trực')
-            ->body(view('admin.calendar', ['is_admin' => $is_admin]));
+            ->body(view('admin.shift-calendar.index', ['is_admin' => $is_admin]));
     }
 
     /**
-     * API cung cấp dữ liệu sự kiện cho FullCalendar
+     * API endpoint for FullCalendar events
      */
-    public function events(Request $request)
+    public function events(ShiftEventsRequest $request)
+    {
+        try {
+            $start = Carbon::parse($request->input('start'));
+            $end = Carbon::parse($request->input('end'));
+
+            $shifts = $this->shiftCalendarService->getShiftsByDateRange($start, $end);
+            $events = $this->shiftCalendarService->formatShiftsForCalendar($shifts);
+
+            return response()->json($events);
+        } catch (\Exception $e) {
+            Log::error('Error fetching calendar events: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unable to fetch calendar data'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update shift when admin drags and drops
+     */
+    public function updateShift(UpdateShiftRequest $request)
+    {
+        $result = $this->shiftCalendarService->updateShiftDate(
+            $request->input('id'),
+            $request->input('date')
+        );
+
+        if ($result['success']) {
+            return response()->json([
+                'status' => 'success',
+                'message' => $result['message']
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => $result['message']
+        ], 422);
+    }
+
+    /**
+     * Swap two shifts
+     */
+    public function swap(SwapShiftRequest $request)
+    {
+        $result = $this->shiftCalendarService->swapShifts(
+            $request->input('source_id'),
+            $request->input('target_id')
+        );
+
+        if ($result['success']) {
+            return response()->json([
+                'status' => 'success',
+                'message' => $result['message']
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => $result['message']
+        ], 500);
+    }
+
+    /**
+     * Get available shifts for swapping
+     */
+    public function getAvailableShifts(GetAvailableShiftsRequest $request)
+    {
+        try {
+            $shifts = $this->shiftCalendarService->getAvailableShiftsForSwap(
+                $request->input('exclude_id')
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $shifts
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching available shifts: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không thể tải danh sách ca trực.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Create new shift
+     */
+    public function createShift(CreateShiftRequest $request)
+    {
+        $result = $this->shiftCalendarService->createShift(
+            $request->input('admin_user_id'),
+            $request->input('shift_date')
+        );
+
+        if ($result['success']) {
+            return response()->json([
+                'status' => 'success',
+                'message' => $result['message'],
+                'data' => $result['shift']
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => $result['message']
+        ], 422);
+    }
+
+    /**
+     * Get shifts by specific date
+     */
+    public function getShiftsByDate(Request $request)
     {
         $request->validate([
-            'start' => 'required|date',
-            'end'   => 'required|date',
+            'date' => 'required|date'
         ]);
 
-        $start = Carbon::parse($request->input('start'))->startOfDay();
-        $end = Carbon::parse($request->input('end'))->endOfDay();
+        try {
+            $shifts = $this->shiftCalendarService->getShiftsByDate($request->input('date'));
+            $count = $this->shiftCalendarService->getShiftCountByDate($request->input('date'));
 
-        $shifts = EveningShift::with('user')
-            ->whereBetween('shift_date', [$start, $end])
-            ->get();
-            
-        $colors = ['#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#34495e', '#1abc9c', '#e67e22', '#d35400', '#c0392b'];
-        $userColors = [];
-        $colorIndex = 0;
-
-        $events = $shifts->map(function ($shift) use (&$userColors, &$colors, &$colorIndex) {
-            if (!$shift->user) {
-                return null;
-            }
-
-            $userId = $shift->user->id;
-            $userName = $shift->user->name;
-
-            if (!isset($userColors[$userId])) {
-                $userColors[$userId] = $colors[$colorIndex % count($colors)];
-                $colorIndex++;
-            }
-
-            return [
-                'id'        => $shift->id,
-                'title'     => $userName,
-                'start'     => $shift->shift_date,
-                'color'     => $userColors[$userId],
-                'allDay'    => true,
-                // Truyền thêm dữ liệu tùy chỉnh
-                'extendedProps' => [
-                    'userId' => $userId,
-                    'userName' => $userName,
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'shifts' => $shifts,
+                    'count' => $count,
+                    'date' => $request->input('date')
                 ]
-            ];
-        })->filter();
+            ]);
 
-        return response()->json($events);
+        } catch (\Exception $e) {
+            Log::error('Error fetching shifts by date: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không thể tải thông tin ca trực.'
+            ], 500);
+        }
     }
 
     /**
-     * API cập nhật lịch khi Admin kéo-thả
+     * Get available users for shift assignment
      */
-    public function updateShift(Request $request)
+    public function getAvailableUsers(Request $request)
     {
         if (!Admin::user()->isRole('administrator')) {
-            return response()->json(['status' => 'error', 'message' => 'Không có quyền thực hiện hành động này.'], 403);
-        }
-
-        $request->validate([
-            'id' => 'required|integer|exists:evening_shifts,id',
-            'date' => 'required|date',
-        ]);
-
-        $shift = EveningShift::findOrFail($request->input('id'));
-        $newDate = $request->input('date');
-
-        // Logic hoán đổi nếu ngày mới đã có người trực
-        // $existingShiftsOnNewDate = EveningShift::where('shift_date', $newDate)->get();
-        
-        // if ($existingShiftsOnNewDate->isNotEmpty()) {
-        //     // Nếu ngày mới đã có người, không cho kéo thả, yêu cầu dùng chức năng hoán đổi
-        //      return response()->json([
-        //         'status' => 'error', 
-        //         'message' => 'Ngày ' . Carbon::parse($newDate)->format('d/m/Y') . ' đã có người trực. Vui lòng dùng chức năng "Hoán đổi".'
-        //     ], 422);
-        // }
-
-        $shift->shift_date = $newDate;
-        $shift->save();
-
-        return response()->json(['status' => 'success', 'message' => 'Cập nhật ca trực thành công.']);
-    }
-
-    /**
-     * API để hoán đổi hai ca trực
-     */
-    public function swap(Request $request)
-    {
-        if (!Admin::user()->isRole('administrator')) {
-            return response()->json(['status' => 'error', 'message' => 'Không có quyền.'], 403);
-        }
-
-        $validated = $request->validate([
-            'source_id' => 'required|integer|exists:evening_shifts,id',
-            'target_id' => 'required|integer|exists:evening_shifts,id',
-        ]);
-
-        if ($validated['source_id'] == $validated['target_id']) {
-            return response()->json(['status' => 'error', 'message' => 'Không thể hoán đổi với chính nó.'], 422);
+            return response()->json([
+                'status' => 'error', 
+                'message' => 'Không có quyền truy cập.'
+            ], 403);
         }
 
         try {
-            DB::transaction(function () use ($validated) {
-                $sourceShift = EveningShift::findOrFail($validated['source_id']);
-                $targetShift = EveningShift::findOrFail($validated['target_id']);
+            $users = $this->shiftCalendarService->getAvailableUsers();
 
-                $sourceUserId = $sourceShift->admin_user_id;
-                $targetUserId = $targetShift->admin_user_id;
+            return response()->json([
+                'status' => 'success',
+                'data' => $users
+            ]);
 
-                $sourceShift->admin_user_id = $targetUserId;
-                $targetShift->admin_user_id = $sourceUserId;
-
-                $sourceShift->save();
-                $targetShift->save();
-            });
         } catch (\Exception $e) {
-            \Log::error('Shift Swap Error: ' . $e->getMessage());
-            return response()->json(['status' => 'error', 'message' => 'Lỗi server khi hoán đổi ca trực.'], 500);
+            Log::error('Error fetching available users: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không thể tải danh sách nhân viên.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Change person assigned to a shift
+     */
+    public function changeShiftPerson(Request $request)
+    {
+        if (!Admin::user()->isRole('administrator')) {
+            return response()->json([
+                'status' => 'error', 
+                'message' => 'Không có quyền thực hiện hành động này.'
+            ], 403);
         }
 
-        return response()->json(['status' => 'success', 'message' => 'Hoán đổi ca trực thành công.']);
+        $request->validate([
+            'shift_id' => 'required|integer|exists:evening_shifts,id',
+            'new_user_id' => 'required|integer|exists:admin_users,id',
+        ]);
+
+        // Additional validation: Check if user belongs to sale_team
+        $newUser = \Encore\Admin\Auth\Database\Administrator::find($request->input('new_user_id'));
+        $saleTeamRole = \Encore\Admin\Auth\Database\Role::where('slug', 'sale_team')->first();
+        
+        if ($saleTeamRole && !$newUser->roles->contains($saleTeamRole->id)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nhân viên được chọn không thuộc team Sale.'
+            ], 422);
+        }
+
+        $result = $this->shiftCalendarService->changeShiftPerson(
+            $request->input('shift_id'),
+            $request->input('new_user_id')
+        );
+
+        if ($result['success']) {
+            return response()->json([
+                'status' => 'success',
+                'message' => $result['message'],
+                'data' => [
+                    'old_user' => $result['old_user'],
+                    'new_user' => $result['new_user']
+                ]
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => $result['message']
+        ], 422);
     }
 }

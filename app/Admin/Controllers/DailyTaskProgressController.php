@@ -26,7 +26,7 @@ class DailyTaskProgressController extends Controller
         return $content
             ->header('Tiến độ hoàn thành công việc')
             ->description('Báo cáo chi tiết tiến độ làm việc của nhân viên')
-            ->view('admin.daily_task_progress.index', $data);
+            ->view('admin.daily-task-progress.index', $data);
     }
 
     /**
@@ -41,7 +41,7 @@ class DailyTaskProgressController extends Controller
         return $content
             ->header('Tiến độ theo ngày')
             ->description("Chi tiết tiến độ ngày {$targetDate->format('d/m/Y')}")
-            ->view('admin.daily_task_progress.daily', $data);
+            ->view('admin.daily-task-progress.daily', $data);
     }
 
     /**
@@ -57,7 +57,7 @@ class DailyTaskProgressController extends Controller
         return $content
             ->header("Chi tiết tiến độ: {$user->name}")
             ->description("Thống kê chi tiết công việc ngày {$targetDate->format('d/m/Y')}")
-            ->view('admin.daily_task_progress.user_detail', $data);
+            ->view('admin.daily-task-progress.user_detail', $data);
     }
 
     /**
