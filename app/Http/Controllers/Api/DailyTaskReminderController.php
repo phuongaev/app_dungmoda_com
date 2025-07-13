@@ -24,7 +24,8 @@ class DailyTaskReminderController extends Controller
             // Lấy danh sách employees (loại trừ administrator và ceo)
             $employees = Administrator::with(['roles'])
                 ->whereHas('roles', function($query) {
-                    $query->whereNotIn('slug', ['administrator', 'ceo']);
+                    // $query->whereNotIn('slug', ['administrator', 'ceo']);
+                    $query->whereNotIn('slug', ['administrator']);
                 })
                 ->where('is_active', 1)
                 ->get();
