@@ -11,7 +11,8 @@ use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
 
 use Encore\Admin\Auth\Database\Administrator;
-use App\Services\AttendanceWebhookService; // Import webhook service
+use App\Services\AttendanceWebhookService;
+use Carbon\Carbon;
 
 class AttendanceController extends Controller
 {
@@ -105,33 +106,26 @@ class AttendanceController extends Controller
 
         $grid->column('check_in_time', __('Giờ vào'))
             ->display(function ($value) {
-                return $value ? date('H:i:s', strtotime($value)) : '';
+                return $value ? Carbon::parse($value)->format('H:i:s') : '';
             })
             ->sortable();
 
         $grid->column('check_out_time', __('Giờ ra'))
             ->display(function ($value) {
-                return $value ? date('H:i:s', strtotime($value)) : 'Chưa ra';
+                return $value ? Carbon::parse($value)->format('H:i:s') : 'Chưa ra';
             })
             ->sortable();
 
         $grid->column('total_work_time', __('Thời gian làm'))
             ->display(function () {
-                // Nếu đã có giá trị work_hours/work_minutes được lưu
                 if ($this->work_hours || $this->work_minutes) {
                     return sprintf('%02d:%02d', $this->work_hours, $this->work_minutes);
                 }
                 
-                // Tính toán trực tiếp từ check_in_time và check_out_time
                 if ($this->check_in_time && $this->check_out_time) {
-                    $checkIn = is_string($this->check_in_time) 
-                        ? \Carbon\Carbon::parse($this->check_in_time) 
-                        : $this->check_in_time;
-                        
-                    $checkOut = is_string($this->check_out_time) 
-                        ? \Carbon\Carbon::parse($this->check_out_time) 
-                        : $this->check_out_time;
-                        
+                    $checkIn = Carbon::parse($this->check_in_time);
+                    $checkOut = Carbon::parse($this->check_out_time);
+                    
                     $diff = $checkOut->diff($checkIn);
                     $hours = $diff->h + ($diff->days * 24);
                     $minutes = $diff->i;
@@ -139,12 +133,9 @@ class AttendanceController extends Controller
                     return sprintf('%02d:%02d', $hours, $minutes);
                 }
                 
-                // Nếu đang trong ca (chưa checkout)
                 if ($this->check_in_time && !$this->check_out_time) {
-                    $checkIn = is_string($this->check_in_time) 
-                        ? \Carbon\Carbon::parse($this->check_in_time) 
-                        : $this->check_in_time;
-                        
+                    $checkIn = Carbon::parse($this->check_in_time);
+                    
                     $diff = now()->diff($checkIn);
                     $hours = $diff->h + ($diff->days * 24);
                     $minutes = $diff->i;
@@ -153,8 +144,7 @@ class AttendanceController extends Controller
                 }
                 
                 return '<span class="text-muted">--:--</span>';
-            })
-            ->sortable();
+            });
             
         $grid->column('status', __('Trạng thái'))->label([
             'checked_in' => 'success',
@@ -206,8 +196,11 @@ class AttendanceController extends Controller
             ->required();
 
         $form->date('work_date', __('Ngày làm việc'))->default(date('Y-m-d'));
+
         $form->datetime('check_in_time', __('Giờ vào'));
+
         $form->datetime('check_out_time', __('Giờ ra'));
+
         $form->text('check_in_ip', __('IP vào'));
         $form->text('check_out_ip', __('IP ra'));
         $form->number('work_hours', __('Số giờ làm'))->default(0);

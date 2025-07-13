@@ -20,6 +20,7 @@ class UserController extends AdminController
         $grid = new Grid(new $userModel());
 
         $grid->column('id', 'ID')->sortable();
+        $grid->column('avatar', 'Avatar')->image('', 60, 60);
         $grid->column('username', trans('admin.username'));
         $grid->column('name', trans('admin.name'));
 
@@ -68,6 +69,9 @@ class UserController extends AdminController
 
         // THÊM TRƯỜNG BẬT/TẮT VÀO ĐÂY
         $form->switch('is_active', 'Hoạt động')->default(1);
+
+        // THÊM TRƯỜNG THREAD_ID VÀO ĐÂY
+        $form->text('thread_id', 'Thread ID')->placeholder('Nhập Thread ID');
 
         $form->multipleSelect('roles', trans('admin.roles'))->options($roleModel::all()->pluck('name', 'id'));
         $form->multipleSelect('permissions', trans('admin.permissions'))->options($permissionModel::all()->pluck('name', 'id'));

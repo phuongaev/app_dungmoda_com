@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\DailyTaskReminderController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,4 +31,10 @@ Route::group(['prefix' => 'webhook'], function () {
 Route::prefix('media')->group(function () {
    Route::get('/code/{variationsCode}', [MediaController::class, 'getMediaByVariationsCodeParam']);
    Route::get('/source-name/{mediaId}', [MediaController::class, 'getSourceNameByMediaId']);
+});
+
+
+// Api cho Daily Tasks
+Route::group(['prefix' => 'daily-tasks'], function () {
+   Route::get('/reminders', [DailyTaskReminderController::class, 'index']);
 });

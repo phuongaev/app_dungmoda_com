@@ -13,5 +13,6 @@ class Administrator extends BaseAdministrator
         'name',
         'avatar',
         'is_active',
+        'thread_id',
     ];
 }
