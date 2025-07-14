@@ -9,6 +9,7 @@
      data-swap-url="{{ route('admin.shifts.swap') }}"
      data-change-person-url="{{ route('admin.shifts.change_person') }}"
      data-create-shift-url="{{ route('admin.shifts.create') }}"
+     data-delete-url="{{ route('admin.shifts.delete') }}"
      data-available-users-url="{{ route('admin.shifts.available_users') }}"
      data-available-shifts-url="{{ route('admin.shifts.available') }}"
      data-csrf-token="{{ csrf_token() }}">
@@ -48,6 +49,7 @@
                         <p><strong>Kéo thả:</strong> Kéo ca trực để chuyển ngày</p>
                         <p><strong>Thay đổi người:</strong> Chọn nhân viên khác trực thay</p>
                         <p><strong>Hoán đổi ca:</strong> Đổi với ca trực khác</p>
+                        <p><strong>Xóa ca trực:</strong> Click vào tên người rồi chọn "Xóa ca trực"</p>
                         <p><strong>Lưu ý:</strong> Một ngày có thể có nhiều người trực</p>
                     </div>
                 </div>

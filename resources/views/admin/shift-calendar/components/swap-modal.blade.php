@@ -115,6 +115,11 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <!-- NEW: Nút xóa ca trực - chỉ hiển thị khi edit -->
+                <button type="button" class="btn btn-danger pull-left" id="deleteShiftBtn" style="display: none;">
+                    <i class="fa fa-trash"></i> Xóa ca trực
+                </button>
+                
                 <button type="button" class="btn btn-default" data-dismiss="modal">
                     <i class="fa fa-times"></i> Đóng
                 </button>

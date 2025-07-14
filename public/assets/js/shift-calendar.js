@@ -1,4 +1,4 @@
-// public/vendor/laravel-admin/js/shift-calendar.js
+// public/admin/assets/js/shift-calendar.js
 
 (function() {
     'use strict';
@@ -60,6 +60,7 @@
             swapUrl: container.dataset.swapUrl,
             changePersonUrl: container.dataset.changePersonUrl,
             createShiftUrl: container.dataset.createShiftUrl,
+            deleteUrl: container.dataset.deleteUrl,
             availableUsersUrl: container.dataset.availableUsersUrl,
             availableShiftsUrl: container.dataset.availableShiftsUrl,
             csrfToken: container.dataset.csrfToken
@@ -84,7 +85,7 @@
     }
 
     /**
-     * Update staff legend
+     * Update staff legend - CLEAN VERSION after Service fix
      */
     function updateStaffLegend(events) {
         const legendElement = document.getElementById('staff-legend');
@@ -94,10 +95,11 @@
         
         // Process events to extract unique users with their colors
         events.forEach(event => {
-            if (event.extendedProps && event.extendedProps.userId) {
-                const userId = event.extendedProps.userId;
+            // Bây giờ data đã được đưa vào extendedProps trong Service
+            if (event.extendedProps && event.extendedProps.user_id) {
+                const userId = event.extendedProps.user_id;
                 const userName = event.extendedProps.userName || event.title;
-                const color = event.extendedProps.userColor || event.color; // Use explicit userColor first
+                const color = event.backgroundColor || event.color || '#5cb85c';
                 
                 if (!users.has(userId)) {
                     users.set(userId, { name: userName, color: color });
@@ -108,14 +110,14 @@
         // Generate legend HTML
         let legendHtml = '';
         if (users.size === 0) {
-            legendHtml = '<li><em>Chưa có ca trực nào</em></li>';
+            legendHtml = '<li><em style="color: #999;">Chưa có ca trực nào</em></li>';
         } else {
             users.forEach((user, userId) => {
-                const safeColor = user.color || '#cccccc'; // Fallback color
+                const safeColor = user.color || '#5cb85c';
                 legendHtml += `
-                    <li>
-                        <div class="legend-color-box" style="background-color: ${safeColor}"></div>
-                        <span class="legend-user-name">${user.name}</span>
+                    <li style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <div class="legend-color-box" style="width: 16px; height: 16px; background-color: ${safeColor}; margin-right: 8px; border-radius: 3px; border: 1px solid #ddd;"></div>
+                        <span class="legend-user-name" style="font-size: 13px;">${user.name}</span>
                     </li>
                 `;
             });
@@ -125,18 +127,22 @@
     }
 
     /**
-     * Show/hide tabs based on mode (add or edit)
+     * Show/hide tabs and delete button based on mode (add or edit)
      */
     function showTabsForMode(mode) {
         const addShiftTabLi = document.getElementById('addShiftTabLi');
         const changePersonTabLi = document.getElementById('changePersonTabLi');
         const swapShiftTabLi = document.getElementById('swapShiftTabLi');
+        const deleteShiftBtn = document.getElementById('deleteShiftBtn');
 
         if (mode === 'add') {
             // Show add shift tab, hide others
             if (addShiftTabLi) addShiftTabLi.style.display = 'block';
             if (changePersonTabLi) changePersonTabLi.style.display = 'none';
             if (swapShiftTabLi) swapShiftTabLi.style.display = 'none';
+            
+            // Hide delete button for add mode
+            if (deleteShiftBtn) deleteShiftBtn.style.display = 'none';
             
             // Activate add shift tab
             if (window.jQuery) {
@@ -147,6 +153,9 @@
             if (addShiftTabLi) addShiftTabLi.style.display = 'none';
             if (changePersonTabLi) changePersonTabLi.style.display = 'block';
             if (swapShiftTabLi) swapShiftTabLi.style.display = 'block';
+            
+            // Show delete button for edit mode
+            if (deleteShiftBtn) deleteShiftBtn.style.display = 'block';
             
             // Activate change person tab
             if (window.jQuery) {
@@ -407,6 +416,64 @@
     }
 
     /**
+     * Handle delete shift confirmation - NEW FUNCTION
+     */
+    function handleDeleteShiftConfirmation(config) {
+        const deleteBtn = document.getElementById('deleteShiftBtn');
+        
+        if (!deleteBtn) return;
+
+        const shiftId = deleteBtn.dataset.shiftId;
+
+        if (!shiftId) {
+            showToast('error', 'Không tìm thấy thông tin ca trực để xóa.');
+            return;
+        }
+
+        // Show loading state
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang xóa...';
+
+        fetch(config.deleteUrl, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': config.csrfToken
+            },
+            body: JSON.stringify({
+                shift_id: shiftId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showToast('success', data.message || 'Đã xóa ca trực thành công.');
+                
+                // Hide modal
+                if (window.jQuery) {
+                    window.jQuery('#manageShiftModal').modal('hide');
+                }
+                
+                // Refresh calendar
+                if (calendar) {
+                    calendar.refetchEvents();
+                }
+            } else {
+                showToast('error', data.message || 'Có lỗi xảy ra khi xóa ca trực.');
+            }
+        })
+        .catch(error => {
+            console.error('Delete shift error:', error);
+            showToast('error', 'Lỗi kết nối. Không thể xóa ca trực.');
+        })
+        .finally(() => {
+            // Reset button state
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fa fa-trash"></i> Xóa ca trực';
+        });
+    }
+
+    /**
      * Handle swap confirmation
      */
     function handleSwapConfirmation(config) {
@@ -504,7 +571,7 @@
                 // Add tooltip
                 if (info.event.title && window.jQuery) {
                     window.jQuery(info.el).tooltip({
-                        title: info.event.title + ' - ' + (info.event.extendedProps.shiftDate || ''),
+                        title: info.event.title + ' - ' + (info.event.startStr || ''),
                         placement: 'top',
                         trigger: 'hover',
                         container: 'body'
@@ -567,7 +634,7 @@
                 }
             },
 
-            // Event interactions
+            // Event interactions - UPDATED để sử dụng extendedProps
             eventClick: function(info) {
                 if (!config.isAdmin) return;
 
@@ -577,19 +644,31 @@
                 const currentShiftInfo = document.getElementById('currentShiftInfo');
                 const confirmSwapBtn = document.getElementById('confirmSwapBtn');
                 const confirmChangePersonBtn = document.getElementById('confirmChangePersonBtn');
+                const deleteShiftBtn = document.getElementById('deleteShiftBtn');
                 const currentShiftInfoGroup = document.getElementById('currentShiftInfoGroup');
                 const selectedDateInfoGroup = document.getElementById('selectedDateInfoGroup');
 
                 if (currentShiftInfo && confirmSwapBtn && confirmChangePersonBtn) {
+                    // UPDATED: Sử dụng data từ extendedProps sau khi Service đã fix
+                    const userName = event.extendedProps.userName || event.title || 'Chưa có tên';
+                    const shiftDate = event.extendedProps.shiftDate || event.startStr || '';
+                    const formattedDate = shiftDate ? new Date(shiftDate).toLocaleDateString('vi-VN') : '';
+                    
                     // Update current shift info
                     currentShiftInfo.innerHTML = `
-                        <strong>${event.extendedProps.userName}</strong><br>
-                        <small>Ngày: ${event.extendedProps.shiftDate || event.start.toLocaleDateString('vi-VN')}</small>
+                        <div class="alert alert-info">
+                            <strong><i class="fa fa-user"></i> ${userName}</strong><br>
+                            <small><i class="fa fa-calendar"></i> Ngày: ${formattedDate}</small>
+                        </div>
                     `;
                     
-                    // Set shift ID for both buttons
+                    // Set shift ID for all buttons including delete button
                     confirmSwapBtn.dataset.sourceId = event.id;
                     confirmChangePersonBtn.dataset.shiftId = event.id;
+                    // Set shift ID for delete button
+                    if (deleteShiftBtn) {
+                        deleteShiftBtn.dataset.shiftId = event.id;
+                    }
                     
                     // Show/hide appropriate groups
                     if (currentShiftInfoGroup) currentShiftInfoGroup.style.display = 'block';
@@ -697,6 +776,18 @@
             });
         }
 
+        // Handle delete shift button
+        const deleteShiftBtn = document.getElementById('deleteShiftBtn');
+        if (deleteShiftBtn) {
+            // Remove existing event listeners
+            deleteShiftBtn.replaceWith(deleteShiftBtn.cloneNode(true));
+            const newDeleteShiftBtn = document.getElementById('deleteShiftBtn');
+            
+            newDeleteShiftBtn.addEventListener('click', function() {
+                handleDeleteShiftConfirmation(config);
+            });
+        }
+
         // Initialize Select2 when modal is shown
         if (window.jQuery) {
             window.jQuery('#manageShiftModal').off('shown.bs.modal').on('shown.bs.modal', function() {
@@ -729,6 +820,7 @@
                 const addUserSelect = document.getElementById('addShiftUserSelect');
                 const userSelect = document.getElementById('newPersonSelect');
                 const shiftSelect = document.getElementById('targetShiftSelect');
+                const deleteShiftBtn = document.getElementById('deleteShiftBtn');
                 
                 if (addUserSelect) {
                     addUserSelect.selectedIndex = 0;
@@ -749,6 +841,14 @@
                     if (window.jQuery.fn.select2) {
                         window.jQuery(shiftSelect).val(null).trigger('change');
                     }
+                }
+
+                // Reset delete button state
+                if (deleteShiftBtn) {
+                    deleteShiftBtn.disabled = false;
+                    deleteShiftBtn.innerHTML = '<i class="fa fa-trash"></i> Xóa ca trực';
+                    deleteShiftBtn.style.display = 'none';
+                    delete deleteShiftBtn.dataset.shiftId;
                 }
 
                 // Show all tabs for next use
@@ -811,8 +911,6 @@
         isInitialized = false;
         userColors = {};
     }
-
-
 
     // Event listeners
     document.addEventListener('DOMContentLoaded', initializeShiftCalendar);

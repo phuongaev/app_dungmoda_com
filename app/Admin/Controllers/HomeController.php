@@ -51,6 +51,7 @@ class HomeController extends Controller
                     if ($isAdmin) {
                         // $column->append($this->packagesWidget());
                         $column->append(new CashFlowWidget());
+                        $column->append(new UpcomingRequestsWidget());
                     }
 
                     if (!$isAdmin) {
@@ -76,23 +77,15 @@ class HomeController extends Controller
 
 
             // Row 2: Widget đơn xin nghỉ và hoán đổi ca (chỉ admin mới thấy)
-            ->row(function (Row $row) use ($isAdmin) {
-                if ($isAdmin) {
-                    $row->column(6, function (Column $column) {
-                        $column->append(new UpcomingRequestsWidget());
-                    });
-                }
+            ->row(function (Row $row) use ($isAdmin, $user) {
+                
             })
-
-
 
 
             // Row 3: Calendar hoặc thông tin khác
             ->row(function (Row $row) use ($isAdmin, $user) {
                 
             });
-
-   
    
     }
 

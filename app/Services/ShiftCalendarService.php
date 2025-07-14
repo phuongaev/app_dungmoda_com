@@ -464,14 +464,20 @@ class ShiftCalendarService
                 'title' => $shift['user']['name'],
                 'start' => $shift['date'],
                 'allDay' => true,
-                'user_id' => $shift['user']['id'],
-                'is_on_leave' => $shift['is_on_leave'],
-                'is_swapped' => $shift['is_swapped'],
-                'swap_info' => $shift['swap_info'],
-                'on_leave_users' => $shift['on_leave_users'],
+
                 'className' => $this->getCalendarClassName($shift),
                 'backgroundColor' => $this->getCalendarBackgroundColor($shift),
                 'borderColor' => $this->getCalendarBorderColor($shift),
+
+                'extendedProps' => [
+                    'user_id' => $shift['user']['id'],
+                    'userName' => $shift['user']['name'],
+                    'shiftDate' => $shift['date'],
+                    'is_on_leave' => $shift['is_on_leave'],
+                    'is_swapped' => $shift['is_swapped'],
+                    'swap_info' => $shift['swap_info'],
+                    'on_leave_users' => $shift['on_leave_users']
+                ]
             ];
         });
     }
@@ -616,4 +622,70 @@ class ShiftCalendarService
             ];
         })->toArray();
     }
+
+
+    /**
+     * Delete a shift
+     */
+    public function deleteShift($shiftId)
+    {
+        try {
+            DB::beginTransaction();
+
+            $shift = EveningShift::find($shiftId);
+            if (!$shift) {
+                return [
+                    'success' => false,
+                    'message' => 'Ca trực không tồn tại.'
+                ];
+            }
+
+            // Check if shift is in the past
+            if ($shift->shift_date->lt(Carbon::today())) {
+                return [
+                    'success' => false,
+                    'message' => 'Không thể xóa ca trực trong quá khứ.'
+                ];
+            }
+
+            // Check if there are pending swap requests involving this shift
+            $pendingSwapRequests = ShiftSwapRequest::where('status', ShiftSwapRequest::STATUS_PENDING)
+                ->where(function ($query) use ($shiftId) {
+                    $query->where('requester_shift_id', $shiftId)
+                          ->orWhere('target_shift_id', $shiftId);
+                })
+                ->exists();
+
+            if ($pendingSwapRequests) {
+                return [
+                    'success' => false,
+                    'message' => 'Không thể xóa ca trực này vì đang có đơn hoán đổi ca chờ duyệt.'
+                ];
+            }
+
+            $userName = $shift->user ? $shift->user->name : 'N/A';
+            $shiftDate = $shift->shift_date->format('d/m/Y');
+
+            $shift->delete();
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'message' => "Đã xóa ca trực của {$userName} vào ngày {$shiftDate}."
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            return [
+                'success' => false,
+                'message' => 'Lỗi khi xóa ca trực: ' . $e->getMessage()
+            ];
+        }
+    }
+
+
+
+    
 }
