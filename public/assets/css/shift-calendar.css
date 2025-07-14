@@ -167,7 +167,8 @@
     opacity: 1;
 }
 
-#currentShiftInfo {
+#currentShiftInfo,
+#selectedDateInfo {
     font-weight: 600;
     color: #3c8dbc;
     background: #f8f9fa;
@@ -176,6 +177,12 @@
     border-left: 4px solid #3c8dbc;
 }
 
+#selectedDateInfo {
+    border-left-color: #28a745;
+    color: #28a745;
+}
+
+#addShiftUserSelect,
 #newPersonSelect,
 #targetShiftSelect {
     width: 100% !important;
@@ -226,15 +233,59 @@
 }
 
 /* Button styling */
+#confirmAddShiftBtn,
 #confirmChangePersonBtn,
 #confirmSwapBtn {
     min-width: 150px;
 }
 
+#confirmAddShiftBtn {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+#confirmAddShiftBtn:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+}
+
 #confirmChangePersonBtn:disabled,
-#confirmSwapBtn:disabled {
+#confirmSwapBtn:disabled,
+#confirmAddShiftBtn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* Calendar date cell styling for click feedback */
+.fc .fc-daygrid-day {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.fc .fc-daygrid-day:hover {
+    background-color: rgba(40, 167, 69, 0.05);
+}
+
+.fc .fc-daygrid-day-top {
+    position: relative;
+}
+
+/* Visual indicator for clickable dates (admin only) */
+.shift-calendar-container[data-is-admin="true"] .fc .fc-daygrid-day:after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    background-color: rgba(40, 167, 69, 0.3);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.shift-calendar-container[data-is-admin="true"] .fc .fc-daygrid-day:hover:after {
+    opacity: 1;
 }
 
 /* === HELP TEXT === */

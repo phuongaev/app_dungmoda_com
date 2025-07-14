@@ -59,6 +59,7 @@
             updateUrl: container.dataset.updateUrl,
             swapUrl: container.dataset.swapUrl,
             changePersonUrl: container.dataset.changePersonUrl,
+            createShiftUrl: container.dataset.createShiftUrl,
             availableUsersUrl: container.dataset.availableUsersUrl,
             availableShiftsUrl: container.dataset.availableShiftsUrl,
             csrfToken: container.dataset.csrfToken
@@ -121,6 +122,80 @@
         }
 
         legendElement.innerHTML = legendHtml;
+    }
+
+    /**
+     * Show/hide tabs based on mode (add or edit)
+     */
+    function showTabsForMode(mode) {
+        const addShiftTabLi = document.getElementById('addShiftTabLi');
+        const changePersonTabLi = document.getElementById('changePersonTabLi');
+        const swapShiftTabLi = document.getElementById('swapShiftTabLi');
+
+        if (mode === 'add') {
+            // Show add shift tab, hide others
+            if (addShiftTabLi) addShiftTabLi.style.display = 'block';
+            if (changePersonTabLi) changePersonTabLi.style.display = 'none';
+            if (swapShiftTabLi) swapShiftTabLi.style.display = 'none';
+            
+            // Activate add shift tab
+            if (window.jQuery) {
+                window.jQuery('#addShiftTab').tab('show');
+            }
+        } else if (mode === 'edit') {
+            // Hide add shift tab, show others
+            if (addShiftTabLi) addShiftTabLi.style.display = 'none';
+            if (changePersonTabLi) changePersonTabLi.style.display = 'block';
+            if (swapShiftTabLi) swapShiftTabLi.style.display = 'block';
+            
+            // Activate change person tab
+            if (window.jQuery) {
+                window.jQuery('#changePersonTab').tab('show');
+            }
+        }
+    }
+
+    /**
+     * Load available users for add shift
+     */
+    function loadAvailableUsersForAdd(config) {
+        const userSelect = document.getElementById('addShiftUserSelect');
+        if (!userSelect) return;
+
+        // Clear existing options
+        userSelect.innerHTML = '<option value="">-- Đang tải... --</option>';
+
+        fetch(config.availableUsersUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': config.csrfToken
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            userSelect.innerHTML = '<option value="">-- Chọn nhân viên --</option>';
+            
+            if (data.status === 'success' && data.data) {
+                data.data.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = user.name;
+                    userSelect.appendChild(option);
+                });
+            }
+
+            // Reinitialize Select2 if available
+            if (window.jQuery && window.jQuery.fn.select2) {
+                window.jQuery(userSelect).select2({
+                    dropdownParent: window.jQuery('#manageShiftModal')
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading available users for add:', error);
+            userSelect.innerHTML = '<option value="">-- Lỗi tải dữ liệu --</option>';
+        });
     }
 
     /**
@@ -206,6 +281,67 @@
         .catch(error => {
             console.error('Error loading available shifts:', error);
             targetSelect.innerHTML = '<option value="">-- Lỗi tải dữ liệu --</option>';
+        });
+    }
+
+    /**
+     * Handle add shift confirmation
+     */
+    function handleAddShiftConfirmation(config) {
+        const confirmBtn = document.getElementById('confirmAddShiftBtn');
+        const userSelect = document.getElementById('addShiftUserSelect');
+        
+        if (!confirmBtn || !userSelect) return;
+
+        const selectedDate = confirmBtn.dataset.selectedDate;
+        const userId = userSelect.value;
+
+        if (!userId) {
+            showToast('warning', 'Vui lòng chọn nhân viên.');
+            return;
+        }
+
+        // Show loading state
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang xử lý...';
+
+        fetch(config.createShiftUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': config.csrfToken
+            },
+            body: JSON.stringify({
+                admin_user_id: userId,
+                shift_date: selectedDate
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showToast('success', data.message);
+                
+                // Hide modal
+                if (window.jQuery) {
+                    window.jQuery('#manageShiftModal').modal('hide');
+                }
+                
+                // Refresh calendar
+                if (calendar) {
+                    calendar.refetchEvents();
+                }
+            } else {
+                showToast('error', data.message || 'Có lỗi xảy ra.');
+            }
+        })
+        .catch(error => {
+            console.error('Add shift error:', error);
+            showToast('error', 'Lỗi kết nối. Không thể thêm ca trực.');
+        })
+        .finally(() => {
+            // Reset button state
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<i class="fa fa-plus"></i> Thêm ca trực';
         });
     }
 
@@ -386,6 +522,51 @@
                 calendar.refetchEvents();
             },
 
+            // Enable date clicking for admins
+            selectable: config.isAdmin,
+            dateClick: function(info) {
+                if (!config.isAdmin) return;
+
+                // Setup modal for adding new shift
+                const selectedDateInfo = document.getElementById('selectedDateInfo');
+                const confirmAddShiftBtn = document.getElementById('confirmAddShiftBtn');
+                const currentShiftInfoGroup = document.getElementById('currentShiftInfoGroup');
+                const selectedDateInfoGroup = document.getElementById('selectedDateInfoGroup');
+
+                if (selectedDateInfo && confirmAddShiftBtn) {
+                    // Update selected date info
+                    const formattedDate = new Date(info.dateStr).toLocaleDateString('vi-VN');
+                    selectedDateInfo.innerHTML = `
+                        <strong>${formattedDate}</strong><br>
+                        <small>Thêm ca trực mới cho ngày này</small>
+                    `;
+                    
+                    // Set selected date for add shift button
+                    confirmAddShiftBtn.dataset.selectedDate = info.dateStr;
+                    
+                    // Show/hide appropriate groups
+                    if (currentShiftInfoGroup) currentShiftInfoGroup.style.display = 'none';
+                    if (selectedDateInfoGroup) selectedDateInfoGroup.style.display = 'block';
+                    
+                    // Update modal title
+                    const modalTitle = document.getElementById('manageShiftModalLabel');
+                    if (modalTitle) {
+                        modalTitle.innerHTML = '<i class="fa fa-plus"></i> Thêm ca trực mới';
+                    }
+                    
+                    // Show appropriate tabs
+                    showTabsForMode('add');
+                    
+                    // Load available users
+                    loadAvailableUsersForAdd(config);
+                    
+                    // Show modal
+                    if (window.jQuery) {
+                        window.jQuery('#manageShiftModal').modal('show');
+                    }
+                }
+            },
+
             // Event interactions
             eventClick: function(info) {
                 if (!config.isAdmin) return;
@@ -396,6 +577,8 @@
                 const currentShiftInfo = document.getElementById('currentShiftInfo');
                 const confirmSwapBtn = document.getElementById('confirmSwapBtn');
                 const confirmChangePersonBtn = document.getElementById('confirmChangePersonBtn');
+                const currentShiftInfoGroup = document.getElementById('currentShiftInfoGroup');
+                const selectedDateInfoGroup = document.getElementById('selectedDateInfoGroup');
 
                 if (currentShiftInfo && confirmSwapBtn && confirmChangePersonBtn) {
                     // Update current shift info
@@ -407,6 +590,19 @@
                     // Set shift ID for both buttons
                     confirmSwapBtn.dataset.sourceId = event.id;
                     confirmChangePersonBtn.dataset.shiftId = event.id;
+                    
+                    // Show/hide appropriate groups
+                    if (currentShiftInfoGroup) currentShiftInfoGroup.style.display = 'block';
+                    if (selectedDateInfoGroup) selectedDateInfoGroup.style.display = 'none';
+                    
+                    // Update modal title
+                    const modalTitle = document.getElementById('manageShiftModalLabel');
+                    if (modalTitle) {
+                        modalTitle.innerHTML = '<i class="fa fa-edit"></i> Quản lý ca trực';
+                    }
+                    
+                    // Show appropriate tabs
+                    showTabsForMode('edit');
                     
                     // Load data for both tabs
                     loadAvailableUsers(config);
@@ -465,6 +661,18 @@
      * Initialize modal event handlers
      */
     function initializeModalHandlers(config) {
+        // Handle add shift button
+        const confirmAddShiftBtn = document.getElementById('confirmAddShiftBtn');
+        if (confirmAddShiftBtn) {
+            // Remove existing event listeners
+            confirmAddShiftBtn.replaceWith(confirmAddShiftBtn.cloneNode(true));
+            const newConfirmAddShiftBtn = document.getElementById('confirmAddShiftBtn');
+            
+            newConfirmAddShiftBtn.addEventListener('click', function() {
+                handleAddShiftConfirmation(config);
+            });
+        }
+
         // Handle change person button
         const confirmChangePersonBtn = document.getElementById('confirmChangePersonBtn');
         if (confirmChangePersonBtn) {
@@ -492,8 +700,15 @@
         // Initialize Select2 when modal is shown
         if (window.jQuery) {
             window.jQuery('#manageShiftModal').off('shown.bs.modal').on('shown.bs.modal', function() {
+                const addUserSelect = document.getElementById('addShiftUserSelect');
                 const userSelect = document.getElementById('newPersonSelect');
                 const shiftSelect = document.getElementById('targetShiftSelect');
+                
+                if (addUserSelect && window.jQuery.fn.select2) {
+                    window.jQuery(addUserSelect).select2({
+                        dropdownParent: window.jQuery('#manageShiftModal')
+                    });
+                }
                 
                 if (userSelect && window.jQuery.fn.select2) {
                     window.jQuery(userSelect).select2({
@@ -511,8 +726,16 @@
             // Reset form when modal is hidden
             window.jQuery('#manageShiftModal').off('hidden.bs.modal').on('hidden.bs.modal', function() {
                 // Reset dropdowns
+                const addUserSelect = document.getElementById('addShiftUserSelect');
                 const userSelect = document.getElementById('newPersonSelect');
                 const shiftSelect = document.getElementById('targetShiftSelect');
+                
+                if (addUserSelect) {
+                    addUserSelect.selectedIndex = 0;
+                    if (window.jQuery.fn.select2) {
+                        window.jQuery(addUserSelect).val(null).trigger('change');
+                    }
+                }
                 
                 if (userSelect) {
                     userSelect.selectedIndex = 0;
@@ -528,8 +751,17 @@
                     }
                 }
 
+                // Show all tabs for next use
+                const addShiftTabLi = document.getElementById('addShiftTabLi');
+                const changePersonTabLi = document.getElementById('changePersonTabLi');
+                const swapShiftTabLi = document.getElementById('swapShiftTabLi');
+                
+                if (addShiftTabLi) addShiftTabLi.style.display = 'block';
+                if (changePersonTabLi) changePersonTabLi.style.display = 'block';
+                if (swapShiftTabLi) swapShiftTabLi.style.display = 'block';
+
                 // Reset to first tab
-                window.jQuery('#changePersonTab').tab('show');
+                window.jQuery('#addShiftTab').tab('show');
             });
         }
     }

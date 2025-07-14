@@ -76,12 +76,13 @@ class CashFlowController extends AdminController
             ->filter('range', 'datetime')
             ->width(120);
         // end column created_at
+            
         // column updated_at
-        $grid->column('updated_at', __('Cập nhật lần cuối'))
-            ->display(function ($updated_at) {
-                return date("Y-m-d H:i:s", strtotime($updated_at));
-            })
-            ->width(120);
+        // $grid->column('updated_at', __('Cập nhật lần cuối'))
+        //     ->display(function ($updated_at) {
+        //         return date("Y-m-d H:i:s", strtotime($updated_at));
+        //     })
+        //     ->width(120);
         // end column updated_at
 
         // region filter

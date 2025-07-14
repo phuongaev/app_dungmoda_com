@@ -13,22 +13,35 @@
                 </h4>
             </div>
             <div class="modal-body">
-                <!-- Thông tin ca trực hiện tại -->
-                <div class="form-group">
+                <!-- Thông tin ca trực hiện tại (chỉ hiển thị khi edit) -->
+                <div class="form-group" id="currentShiftInfoGroup" style="display: none;">
                     <label>Ca trực hiện tại:</label>
                     <div id="currentShiftInfo" class="form-control-static">
                         <!-- Thông tin ca trực hiện tại sẽ được load bởi JS -->
                     </div>
                 </div>
 
+                <!-- Thông tin ngày được chọn (khi tạo mới) -->
+                <div class="form-group" id="selectedDateInfoGroup" style="display: none;">
+                    <label>Ngày được chọn:</label>
+                    <div id="selectedDateInfo" class="form-control-static">
+                        <!-- Ngày được chọn sẽ được load bởi JS -->
+                    </div>
+                </div>
+
                 <!-- Tabs để chọn hành động -->
-                <ul class="nav nav-tabs" role="tablist">
-                    <li role="presentation" class="active">
+                <ul class="nav nav-tabs" role="tablist" id="shiftModalTabs">
+                    <li role="presentation" class="active" id="addShiftTabLi">
+                        <a href="#addShiftTab" aria-controls="addShiftTab" role="tab" data-toggle="tab">
+                            <i class="fa fa-plus"></i> Thêm ca trực
+                        </a>
+                    </li>
+                    <li role="presentation" id="changePersonTabLi">
                         <a href="#changePersonTab" aria-controls="changePersonTab" role="tab" data-toggle="tab">
                             <i class="fa fa-user"></i> Thay đổi người trực
                         </a>
                     </li>
-                    <li role="presentation">
+                    <li role="presentation" id="swapShiftTabLi">
                         <a href="#swapShiftTab" aria-controls="swapShiftTab" role="tab" data-toggle="tab">
                             <i class="fa fa-exchange"></i> Hoán đổi ca trực
                         </a>
@@ -37,8 +50,29 @@
 
                 <!-- Tab contents -->
                 <div class="tab-content" style="margin-top: 15px;">
+                    <!-- Tab thêm ca trực mới -->
+                    <div role="tabpanel" class="tab-pane active" id="addShiftTab">
+                        <div class="form-group">
+                            <label for="addShiftUserSelect">Chọn nhân viên trực:</label>
+                            <select id="addShiftUserSelect" class="form-control" style="width: 100%;">
+                                <option value="">-- Chọn nhân viên --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="alert alert-success">
+                            <i class="fa fa-info-circle"></i>
+                            <strong>Lưu ý:</strong> Thêm ca trực mới cho ngày được chọn. Một ngày có thể có nhiều người trực.
+                        </div>
+
+                        <div class="text-right">
+                            <button type="button" class="btn btn-success" id="confirmAddShiftBtn">
+                                <i class="fa fa-plus"></i> Thêm ca trực
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Tab thay đổi người trực -->
-                    <div role="tabpanel" class="tab-pane active" id="changePersonTab">
+                    <div role="tabpanel" class="tab-pane" id="changePersonTab">
                         <div class="form-group">
                             <label for="newPersonSelect">Chọn người trực mới:</label>
                             <select id="newPersonSelect" class="form-control" style="width: 100%;">
