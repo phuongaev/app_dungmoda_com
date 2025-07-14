@@ -15,8 +15,11 @@ use App\Models\Package;
 use App\Admin\Widgets\DailyTasksWidget;
 use App\Admin\Widgets\OnlineEmployeesWidget;
 use App\Admin\Widgets\CashFlowWidget;
-
 use App\Admin\Widgets\ShiftCalendarDashboardWidget;
+
+use App\Admin\Widgets\UpcomingRequestsWidget;
+use App\Admin\Widgets\EmployeeInfoWidget;
+use App\Admin\Widgets\EmployeeRequestsWidget;
 
 class HomeController extends Controller
 {
@@ -26,15 +29,18 @@ class HomeController extends Controller
         $user = Admin::user();
         $userRoles = $user ? $user->roles->pluck('slug')->toArray() : [];
 
+        // Check if user is admin
+        $isAdmin = in_array('administrator', $userRoles);
+
         return $content
             ->title('Tổng quan')
             ->description('Bảng điều khiển...')
             // ->row(Dashboard::title())
 
             // Row 1: Alert kiện hàng (full width)
-            ->row(function (Row $row) use ($userRoles) {
+            ->row(function (Row $row) use ($isAdmin, $user) {
                 // Cột 1
-                $row->column(6, function (Column $column) use ($userRoles) {
+                $row->column(6, function (Column $column) use ($isAdmin, $user) {
                     // Chấm công
                     $column->append($this->attendanceWidget());
 
@@ -42,11 +48,18 @@ class HomeController extends Controller
                     $column->append(new OnlineEmployeesWidget());
 
                     // Kiện hàng cần xử lý
-                    if (in_array('administrator', $userRoles)) {
+                    if ($isAdmin) {
                         // $column->append($this->packagesWidget());
                         $column->append(new CashFlowWidget());
-                        
                     }
+
+                    if (!$isAdmin) {
+                        // Hiển thị thông tin cá nhân cho nhân viên
+                        $column->append(new EmployeeInfoWidget($user));
+                        $column->append(new EmployeeRequestsWidget($user));
+                    }
+
+
                 });
                 
                 // Cột 2
@@ -58,14 +71,25 @@ class HomeController extends Controller
                     $column->append(new ShiftCalendarDashboardWidget());
                 });             
             })
+ 
 
 
-            // Row 2: 
-            ->row(function (Row $row) {
-                $row->column(12, function (Column $column) {
-                    
-                });
 
+            // Row 2: Widget đơn xin nghỉ và hoán đổi ca (chỉ admin mới thấy)
+            ->row(function (Row $row) use ($isAdmin) {
+                if ($isAdmin) {
+                    $row->column(6, function (Column $column) {
+                        $column->append(new UpcomingRequestsWidget());
+                    });
+                }
+            })
+
+
+
+
+            // Row 3: Calendar hoặc thông tin khác
+            ->row(function (Row $row) use ($isAdmin, $user) {
+                
             });
 
    

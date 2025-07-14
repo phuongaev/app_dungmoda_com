@@ -121,19 +121,38 @@ Route::group([
     $router->delete('workflow-histories/bulk-delete', 'WorkflowHistoryController@bulkDelete')->name('workflow-histories.bulk-delete');
 
 
-    // Ca tối
-    // Main calendar page
-    $router->get('shift-calendar', [ShiftCalendarController::class, 'index'])->name('shift_calendar.index');
-    
-    // API endpoints
-    $router->get('shifts/events', [ShiftCalendarController::class, 'events'])->name('shifts.events');
-    $router->get('shifts/available-shifts', [ShiftCalendarController::class, 'getAvailableShifts'])->name('shifts.available');
-    $router->get('shifts/available-users', [ShiftCalendarController::class, 'getAvailableUsers'])->name('shifts.available_users');
-    $router->get('shifts/by-date', [ShiftCalendarController::class, 'getShiftsByDate'])->name('shifts.by_date');
-    $router->post('shifts/update', [ShiftCalendarController::class, 'updateShift'])->name('shifts.update');
-    $router->post('shifts/swap', [ShiftCalendarController::class, 'swap'])->name('shifts.swap');
-    $router->post('shifts/change-person', [ShiftCalendarController::class, 'changeShiftPerson'])->name('shifts.change_person');
-    $router->post('shifts/create', [ShiftCalendarController::class, 'createShift'])->name('shifts.create');
+    ############# Existing Shift Calendar Routes #############
+    $router->get('shift-calendar', 'ShiftCalendarController@index')->name('shift-calendar.index');
+    $router->get('shifts/events', 'ShiftCalendarController@events')->name('shifts.events');
+    $router->post('shifts/update', 'ShiftCalendarController@updateShift')->name('shifts.update');
+    $router->post('shifts/swap', 'ShiftCalendarController@swapShifts')->name('shifts.swap');
+    $router->post('shifts/change-person', 'ShiftCalendarController@changePerson')->name('shifts.change_person');
+    $router->post('shifts/create', 'ShiftCalendarController@createShift')->name('shifts.create');
+    $router->delete('shifts/delete', 'ShiftCalendarController@deleteShift')->name('shifts.delete');
+    $router->get('shifts/available-users', 'ShiftCalendarController@getAvailableUsers')->name('shifts.available_users');
+    $router->get('shifts/available', 'ShiftCalendarController@getAvailableShifts')->name('shifts.available');
+
+
+    ############# NEW: Admin Leave Request Management #############
+    $router->resource('leave-requests', 'LeaveRequestController')->except(['create', 'store', 'edit', 'update']);
+    $router->post('leave-requests/{id}/approve', 'LeaveRequestController@approve')->name('leave-requests.approve');
+    $router->post('leave-requests/{id}/reject', 'LeaveRequestController@reject')->name('leave-requests.reject');
+    $router->post('leave-requests/{id}/cancel', 'LeaveRequestController@cancel')->name('leave-requests.cancel');
+
+    ############# NEW: Admin Shift Swap Request Management #############
+    $router->resource('shift-swap-requests', 'ShiftSwapRequestController')->except(['create', 'store', 'edit', 'update']);
+    $router->post('shift-swap-requests/{id}/approve', 'ShiftSwapRequestController@approve')->name('shift-swap-requests.approve');
+    $router->post('shift-swap-requests/{id}/reject', 'ShiftSwapRequestController@reject')->name('shift-swap-requests.reject');
+    $router->post('shift-swap-requests/{id}/cancel', 'ShiftSwapRequestController@cancel')->name('shift-swap-requests.cancel');
+
+    ############# NEW: Employee Leave Request Management #############
+    $router->resource('employee-leave-requests', 'EmployeeLeaveRequestController')->except(['edit', 'update', 'destroy']);
+    $router->post('employee-leave-requests/{id}/cancel', 'EmployeeLeaveRequestController@cancel')->name('employee-leave-requests.cancel');
+
+    ############# NEW: Employee Shift Swap Management #############
+    $router->resource('employee-shift-swaps', 'EmployeeShiftSwapController')->except(['edit', 'update', 'destroy']);
+    $router->post('employee-shift-swaps/{id}/cancel', 'EmployeeShiftSwapController@cancel')->name('employee-shift-swaps.cancel');
+    $router->get('employee-shift-swaps/get-user-shifts', 'EmployeeShiftSwapController@getUserShifts')->name('employee-shift-swaps.get-user-shifts');
 
 
 });

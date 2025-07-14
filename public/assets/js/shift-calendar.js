@@ -812,6 +812,8 @@
         userColors = {};
     }
 
+
+
     // Event listeners
     document.addEventListener('DOMContentLoaded', initializeShiftCalendar);
     

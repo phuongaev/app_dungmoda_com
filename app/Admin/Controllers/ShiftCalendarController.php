@@ -263,4 +263,39 @@ class ShiftCalendarController extends AdminController
             'message' => $result['message']
         ], 422);
     }
+
+
+    /**
+     * Delete a shift
+     */
+    public function deleteShift(Request $request)
+    {
+        try {
+            $shiftId = $request->input('shift_id');
+            
+            if (!$shiftId) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'ID ca trực không được cung cấp.'
+                ]);
+            }
+
+            $result = $this->shiftCalendarService->deleteShift($shiftId);
+
+            return response()->json([
+                'status' => $result['success'] ? 'success' : 'error',
+                'message' => $result['message']
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Lỗi khi xóa ca trực: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+
+
+
 }
