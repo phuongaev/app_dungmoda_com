@@ -14,6 +14,7 @@ use Encore\Admin\Facades\Admin;
 use Encore\Admin\Auth\Database\Role;
 use Encore\Admin\Auth\Database\Administrator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class EmployeeShiftSwapController extends AdminController
@@ -72,6 +73,9 @@ class EmployeeShiftSwapController extends AdminController
     {
         $grid = new Grid(new ShiftSwapRequest());
 
+        // Eager load relationships để tránh N+1 query
+        $grid->model()->with(['requester', 'targetUser', 'approver']);
+
         // Chỉ hiển thị đơn của nhân viên hiện tại (cả làm người yêu cầu và người được đề xuất)
         $grid->model()->where(function ($query) {
             $query->where('requester_id', Admin::user()->id)
@@ -88,7 +92,7 @@ class EmployeeShiftSwapController extends AdminController
             return $date ? \Carbon\Carbon::parse($date)->format('d/m/Y') : 'N/A';
         })->sortable();
         
-        $grid->column('target_user.name', 'Người được đề xuất')->display(function ($name) {
+        $grid->column('targetUser.name', 'Người được đề xuất')->display(function ($name) {
             return $name ?: 'N/A';
         });
         
@@ -107,7 +111,13 @@ class EmployeeShiftSwapController extends AdminController
         $grid->column('reason', 'Lý do')->limit(50);
         
         $grid->column('status', 'Trạng thái')->display(function ($status) {
-            return $this->status_badge;
+            $badges = [
+                'pending' => '<span class="label label-warning">Chờ duyệt</span>',
+                'approved' => '<span class="label label-success">Đã duyệt</span>',
+                'rejected' => '<span class="label label-danger">Từ chối</span>',
+                'cancelled' => '<span class="label label-default">Đã hủy</span>'
+            ];
+            return $badges[$status] ?? $status;
         });
         
         $grid->column('approver.name', 'Người duyệt')->display(function ($name) {
@@ -126,7 +136,12 @@ class EmployeeShiftSwapController extends AdminController
         $grid->filter(function($filter) {
             $filter->disableIdFilter();
             
-            $filter->equal('status', 'Trạng thái')->select(ShiftSwapRequest::getStatuses());
+            $filter->equal('status', 'Trạng thái')->select([
+                'pending' => 'Chờ duyệt',
+                'approved' => 'Đã duyệt',
+                'rejected' => 'Từ chối',
+                'cancelled' => 'Đã hủy'
+            ]);
             $filter->between('original_requester_shift_date', 'Ca người YC')->date();
             $filter->between('original_target_shift_date', 'Ca được đề xuất')->date();
             $filter->between('created_at', 'Ngày tạo')->datetime();
@@ -164,55 +179,51 @@ class EmployeeShiftSwapController extends AdminController
      */
     protected function detail($id)
     {
-        $show = new Show(ShiftSwapRequest::findOrFail($id));
-
-        // Chỉ cho phép xem đơn liên quan đến mình
-        $swapRequest = ShiftSwapRequest::where('id', $id)
-            ->where(function ($query) {
-                $query->where('requester_id', Admin::user()->id)
-                      ->orWhere('target_user_id', Admin::user()->id);
-            })
-            ->firstOrFail();
+        $show = new Show(ShiftSwapRequest::with(['requester', 'targetUser', 'approver'])->findOrFail($id));
 
         $show->field('id', 'ID');
-        $show->field('requester.name', 'Người yêu cầu hoán đổi');
-        $show->field('original_requester_shift_date', 'Ca trực của người yêu cầu')->as(function ($date) {
-            return \Carbon\Carbon::parse($date)->format('d/m/Y');
+        $show->field('requester.name', 'Người yêu cầu hoán đổi')->as(function () {
+            return $this->requester ? (string)$this->requester->name : 'N/A';
         });
-        $show->field('target_user.name', 'Người được đề xuất hoán đổi');
-        $show->field('original_target_shift_date', 'Ca trực được đề xuất')->as(function ($date) {
-            return \Carbon\Carbon::parse($date)->format('d/m/Y');
+        $show->field('original_requester_shift_date', 'Ca trực của người yêu cầu')->as(function () {
+            return $this->original_requester_shift_date ? $this->original_requester_shift_date->format('d/m/Y') : 'N/A';
         });
-        $show->field('swap_summary', 'Tóm tắt hoán đổi');
-        $show->field('reason', 'Lý do hoán đổi');
-        $show->field('status', 'Trạng thái')->as(function ($status) {
-            return ShiftSwapRequest::getStatuses()[$status] ?? $status;
+        $show->field('targetUser.name', 'Người được đề xuất hoán đổi')->as(function () {
+            return $this->targetUser ? (string)$this->targetUser->name : 'N/A';
         });
-        $show->field('admin_notes', 'Ghi chú từ quản lý');
-        $show->field('approver.name', 'Người duyệt');
-        $show->field('approved_at', 'Ngày duyệt')->as(function ($date) {
-            return $date ? \Carbon\Carbon::parse($date)->format('d/m/Y H:i') : '-';
+        $show->field('original_target_shift_date', 'Ca trực được đề xuất')->as(function () {
+            return $this->original_target_shift_date ? $this->original_target_shift_date->format('d/m/Y') : 'N/A';
         });
-        $show->field('created_at', 'Ngày tạo')->as(function ($date) {
-            return \Carbon\Carbon::parse($date)->format('d/m/Y H:i');
+        $show->field('swap_summary', 'Tóm tắt hoán đổi')->as(function () {
+            $requesterName = $this->requester ? (string)$this->requester->name : 'N/A';
+            $targetName = $this->targetUser ? (string)$this->targetUser->name : 'N/A';
+            $requesterDate = $this->original_requester_shift_date ? $this->original_requester_shift_date->format('d/m/Y') : 'N/A';
+            $targetDate = $this->original_target_shift_date ? $this->original_target_shift_date->format('d/m/Y') : 'N/A';
+            return "{$requesterName} ({$requesterDate}) ↔ {$targetName} ({$targetDate})";
         });
-
-        // Hiển thị lịch sử
-        $show->field('histories', 'Lịch sử')->as(function () {
-            $html = '<table class="table table-striped table-bordered">';
-            $html .= '<thead><tr><th>Hành động</th><th>Người thực hiện</th><th>Ghi chú</th><th>Thời gian</th></tr></thead><tbody>';
-            
-            foreach ($this->histories as $history) {
-                $html .= '<tr>';
-                $html .= '<td>' . $history->action_badge . '</td>';
-                $html .= '<td>' . ($history->admin->name ?? 'N/A') . '</td>';
-                $html .= '<td>' . ($history->notes ?? '-') . '</td>';
-                $html .= '<td>' . $history->created_at->format('d/m/Y H:i') . '</td>';
-                $html .= '</tr>';
-            }
-            
-            $html .= '</tbody></table>';
-            return $html;
+        $show->field('reason', 'Lý do hoán đổi')->as(function () {
+            return (string)$this->reason ?: 'N/A';
+        });
+        $show->field('status', 'Trạng thái')->as(function () {
+            $statuses = [
+                'pending' => 'Chờ duyệt',
+                'approved' => 'Đã duyệt',
+                'rejected' => 'Từ chối',
+                'cancelled' => 'Đã hủy'
+            ];
+            return $statuses[$this->status] ?? (string)$this->status;
+        });
+        $show->field('admin_notes', 'Ghi chú của admin')->as(function () {
+            return (string)$this->admin_notes ?: 'Không có ghi chú';
+        });
+        $show->field('approver.name', 'Người duyệt')->as(function () {
+            return $this->approver ? (string)$this->approver->name : 'Chưa có';
+        });
+        $show->field('approved_at', 'Ngày duyệt')->as(function () {
+            return $this->approved_at ? $this->approved_at->format('d/m/Y H:i') : 'Chưa duyệt';
+        });
+        $show->field('created_at', 'Ngày tạo')->as(function () {
+            return $this->created_at ? $this->created_at->format('d/m/Y H:i') : 'N/A';
         });
 
         return $show;
@@ -227,125 +238,101 @@ class EmployeeShiftSwapController extends AdminController
     {
         $form = new Form(new ShiftSwapRequest());
 
-        $form->hidden('requester_id')->value(Admin::user()->id);
+        // Chỉ cho phép nhân viên tạo đơn cho chính mình
+        $form->hidden('requester_id')->default(Admin::user()->id);
 
-        // Lấy ca trực của user hiện tại (từ hôm nay trở đi)
-        $userShifts = EveningShift::where('admin_user_id', Admin::user()->id)
-            ->where('shift_date', '>=', Carbon::today())
-            ->orderBy('shift_date')
-            ->get()
-            ->pluck('shift_date_formatted', 'id');
-
-        if ($userShifts->isEmpty()) {
-            return '<div class="alert alert-warning">Bạn không có ca trực nào từ hôm nay trở đi để hoán đổi.</div>';
-        }
+        // Get shifts của nhân viên hiện tại (từ hôm nay trở đi)
+        $userShifts = EveningShift::forUserUpcoming(Admin::user()->id)->get();
+        $shiftOptions = $userShifts->mapWithKeys(function ($shift) {
+            return [$shift->id => $shift->shift_date->format('d/m/Y')];
+        });
 
         $form->select('requester_shift_id', 'Ca trực của tôi muốn đổi')
-            ->options($userShifts)
-            ->rules('required')
+            ->options($shiftOptions)
+            ->required()
             ->help('Chọn ca trực của bạn muốn hoán đổi');
 
-        // Lấy danh sách nhân viên sale team (trừ mình)
-        $saleTeamRole = Role::where('slug', 'sale_team')->first();
-        $saleTeamUsers = [];
-        
-        if ($saleTeamRole) {
-            $saleTeamUsers = $saleTeamRole->administrators()
-                ->where('id', '!=', Admin::user()->id)
-                ->pluck('name', 'id');
-        }
+        // Get all available shifts for swapping (excluding user's own shifts)
+        $availableShifts = EveningShift::with('user')
+            ->where('admin_user_id', '!=', Admin::user()->id)
+            ->where('shift_date', '>=', Carbon::today())
+            ->get();
 
-        $form->select('target_user_id', 'Người muốn hoán đổi với')
-            ->options($saleTeamUsers)
-            ->rules('required')
-            ->help('Chọn đồng nghiệp bạn muốn hoán đổi ca trực')
-            ->load('target_shift_id', '/admin/employee-shift-swaps/get-user-shifts');
+        $targetShiftOptions = $availableShifts->mapWithKeys(function ($shift) {
+            return [$shift->id => $shift->user->name . ' - ' . $shift->shift_date->format('d/m/Y')];
+        });
 
-        $form->select('target_shift_id', 'Ca trực của người đó')
-            ->rules('required')
-            ->help('Chọn ca trực của đồng nghiệp mà bạn muốn nhận');
+        $form->select('target_shift_id', 'Ca trực muốn nhận')
+            ->options($targetShiftOptions)
+            ->required()
+            ->help('Chọn ca trực bạn muốn nhận');
+
+        // Hidden field để lưu target_user_id
+        $form->hidden('target_user_id');
 
         $form->textarea('reason', 'Lý do hoán đổi')
-            ->rules('required|min:10')
-            ->rows(4)
-            ->help('Mô tả lý do tại sao bạn muốn hoán đổi ca trực (tối thiểu 10 ký tự)');
+            ->required()
+            ->help('Vui lòng nêu rõ lý do cần hoán đổi ca trực');
 
-        $form->hidden('status')->value(ShiftSwapRequest::STATUS_PENDING);
+        $form->hidden('status')->default(ShiftSwapRequest::STATUS_PENDING);
 
-        // Validation tùy chỉnh
+        // Add JavaScript to auto-fill target_user_id when target_shift_id changes
+        $form->html('<script>
+            $(document).ready(function() {
+                $("select[name=\'target_shift_id\']").change(function() {
+                    var selectedShiftId = $(this).val();
+                    if (selectedShiftId) {
+                        var shiftData = ' . json_encode($availableShifts->mapWithKeys(function ($shift) {
+                            return [$shift->id => $shift->admin_user_id];
+                        })) . ';
+                        var targetUserId = shiftData[selectedShiftId];
+                        if (targetUserId) {
+                            $("input[name=\'target_user_id\']").val(targetUserId);
+                        }
+                    }
+                });
+            });
+        </script>');
+
+        // Save target_user_id when target_shift_id is selected
         $form->saving(function (Form $form) {
-            // Kiểm tra ca trực của requester
-            $requesterShift = EveningShift::find($form->requester_shift_id);
-            if (!$requesterShift || $requesterShift->admin_user_id != Admin::user()->id) {
-                return back()->withErrors(['requester_shift_id' => 'Ca trực không hợp lệ hoặc không thuộc về bạn.']);
+            // Double check target_user_id is set
+            if (!$form->model()->target_user_id && $form->target_shift_id) {
+                $targetShift = EveningShift::find($form->target_shift_id);
+                if ($targetShift) {
+                    $form->model()->target_user_id = $targetShift->admin_user_id;
+                }
             }
 
-            // Kiểm tra ca trực của target
-            $targetShift = EveningShift::find($form->target_shift_id);
-            if (!$targetShift || $targetShift->admin_user_id != $form->target_user_id) {
-                return back()->withErrors(['target_shift_id' => 'Ca trực của đồng nghiệp không hợp lệ.']);
+            // Save original shift dates
+            if ($form->requester_shift_id) {
+                $requesterShift = EveningShift::find($form->requester_shift_id);
+                if ($requesterShift) {
+                    $form->model()->original_requester_shift_date = $requesterShift->shift_date;
+                }
             }
 
-            // Lưu thông tin ngày gốc để có thể khôi phục
-            $form->original_requester_shift_date = $requesterShift->shift_date;
-            $form->original_target_shift_date = $targetShift->shift_date;
-
-            // Kiểm tra xem có đơn hoán đổi nào đang pending cho 2 ca này không
-            $existingRequest = ShiftSwapRequest::where('status', ShiftSwapRequest::STATUS_PENDING)
-                ->where(function ($query) use ($form) {
-                    $query->where(function ($q) use ($form) {
-                        $q->where('requester_shift_id', $form->requester_shift_id)
-                          ->orWhere('target_shift_id', $form->requester_shift_id);
-                    })->orWhere(function ($q) use ($form) {
-                        $q->where('requester_shift_id', $form->target_shift_id)
-                          ->orWhere('target_shift_id', $form->target_shift_id);
-                    });
-                })
-                ->exists();
-
-            if ($existingRequest) {
-                return back()->withErrors(['requester_shift_id' => 'Đã có đơn hoán đổi đang chờ duyệt cho một trong các ca này.']);
+            if ($form->target_shift_id) {
+                $targetShift = EveningShift::find($form->target_shift_id);
+                if ($targetShift) {
+                    $form->model()->original_target_shift_date = $targetShift->shift_date;
+                }
             }
         });
 
-        // Sau khi lưu thành công
         $form->saved(function (Form $form, $result) {
-            $swapRequest = $form->model();
-            
-            // Lưu lịch sử
-            $swapRequest->addHistory(
-                RequestHistory::ACTION_SUBMITTED,
-                Admin::user()->id,
-                'Nhân viên gửi đơn hoán đổi ca'
-            );
+            try {
+                // Lấy model instance để thêm lịch sử
+                $model = $form->model();
+                if ($model && method_exists($model, 'addHistory')) {
+                    $model->addHistory(RequestHistory::ACTION_SUBMITTED, Admin::user()->id, 'Nhân viên gửi đơn hoán đổi ca');
+                }
+            } catch (\Exception $e) {
+                // Ignore history errors
+            }
         });
 
         return $form;
-    }
-
-    /**
-     * Get user shifts for ajax
-     */
-    public function getUserShifts(Request $request)
-    {
-        $userId = $request->get('q');
-        
-        if (!$userId) {
-            return response()->json([]);
-        }
-
-        $shifts = EveningShift::where('admin_user_id', $userId)
-            ->where('shift_date', '>=', Carbon::today())
-            ->orderBy('shift_date')
-            ->get()
-            ->map(function ($shift) {
-                return [
-                    'id' => $shift->id,
-                    'text' => $shift->shift_date->format('d/m/Y')
-                ];
-            });
-
-        return response()->json($shifts);
     }
 
     /**
@@ -365,7 +352,7 @@ class EmployeeShiftSwapController extends AdminController
         }
 
         try {
-            \DB::beginTransaction();
+            DB::beginTransaction();
 
             $swapRequest->status = ShiftSwapRequest::STATUS_CANCELLED;
             $swapRequest->save();
@@ -377,7 +364,7 @@ class EmployeeShiftSwapController extends AdminController
                 'Nhân viên tự hủy đơn'
             );
 
-            \DB::commit();
+            DB::commit();
 
             return response()->json([
                 'status' => true,
@@ -385,7 +372,7 @@ class EmployeeShiftSwapController extends AdminController
             ]);
 
         } catch (\Exception $e) {
-            \DB::rollBack();
+            DB::rollBack();
             return response()->json([
                 'status' => false,
                 'message' => 'Có lỗi xảy ra: ' . $e->getMessage()

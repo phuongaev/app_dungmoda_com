@@ -154,8 +154,8 @@ class ShiftSwapRequest extends Model
      */
     public function getSwapSummaryAttribute()
     {
-        $requesterName = $this->requester->name ?? 'N/A';
-        $targetName = $this->targetUser->name ?? 'N/A';
+        $requesterName = $this->requester ? $this->requester->name : 'N/A';
+        $targetName = $this->targetUser ? $this->targetUser->name : 'N/A';
         $requesterDate = $this->original_requester_shift_date ? $this->original_requester_shift_date->format('d/m/Y') : 'N/A';
         $targetDate = $this->original_target_shift_date ? $this->original_target_shift_date->format('d/m/Y') : 'N/A';
 

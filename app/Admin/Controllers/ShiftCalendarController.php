@@ -107,6 +107,14 @@ class ShiftCalendarController extends AdminController
     }
 
     /**
+     * Swap two shifts (alias for swap method to match routes)
+     */
+    public function swapShifts(SwapShiftRequest $request)
+    {
+        return $this->swap($request);
+    }
+
+    /**
      * Get available shifts for swapping
      */
     public function getAvailableShifts(GetAvailableShiftsRequest $request)
@@ -215,7 +223,53 @@ class ShiftCalendarController extends AdminController
     }
 
     /**
-     * Change person assigned to a shift
+     * Change person assigned to a shift (method name matching route)
+     */
+    public function changePerson(Request $request)
+    {
+        if (!Admin::user()->isRole('administrator')) {
+            return response()->json([
+                'status' => 'error', 
+                'message' => 'Không có quyền thực hiện hành động này.'
+            ], 403);
+        }
+
+        $request->validate([
+            'shift_id' => 'required|integer|exists:evening_shifts,id',
+            'new_user_id' => 'required|integer|exists:admin_users,id',
+        ]);
+
+        // Additional validation: Check if user belongs to sale_team
+        $newUser = \Encore\Admin\Auth\Database\Administrator::find($request->input('new_user_id'));
+        $saleTeamRole = \Encore\Admin\Auth\Database\Role::where('slug', 'sale_team')->first();
+        
+        if ($saleTeamRole && !$newUser->roles->contains($saleTeamRole->id)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nhân viên được chọn không thuộc team Sale.'
+            ], 422);
+        }
+
+        $result = $this->shiftCalendarService->changePerson(
+            $request->input('shift_id'),
+            $request->input('new_user_id')
+        );
+
+        if ($result['success']) {
+            return response()->json([
+                'status' => 'success',
+                'message' => $result['message']
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => $result['message']
+        ], 422);
+    }
+
+    /**
+     * Change person assigned to a shift (original method)
      */
     public function changeShiftPerson(Request $request)
     {
@@ -264,7 +318,6 @@ class ShiftCalendarController extends AdminController
         ], 422);
     }
 
-
     /**
      * Delete a shift
      */
@@ -294,8 +347,4 @@ class ShiftCalendarController extends AdminController
             ]);
         }
     }
-
-
-
-
 }
