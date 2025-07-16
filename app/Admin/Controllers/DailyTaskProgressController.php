@@ -32,8 +32,26 @@ class DailyTaskProgressController extends Controller
     /**
      * Chi tiết tiến độ theo ngày
      */
-    public function daily(Content $content)
+    public function daily(Request $request)
     {
+        $targetDate = $request->get('date') ? Carbon::parse($request->get('date')) : Carbon::today();
+        $user = Admin::user();
+        $userRoles = $user->roles->pluck('slug')->toArray();
+        
+        // Lấy tasks của user cho ngày đã chọn
+        $userTasks = DailyTask::with(['completions' => function($query) use ($user, $targetDate) {
+            return $query->where('user_id', $user->id)->where('completion_date', $targetDate);
+        }, 'category'])
+        ->where('is_active', 1)
+        ->orderBy('priority', 'desc')
+        ->orderBy('suggested_time')
+        ->get()
+        ->filter(function($task) use ($user, $userRoles, $targetDate) {
+            // Sử dụng method mới cho ngày cụ thể
+            return $task->isActiveOnDate($targetDate) && $task->isAssignedToUser($user->id, $userRoles);
+        });
+
+        
         $date = request('date', Carbon::today()->format('Y-m-d'));
         $targetDate = Carbon::parse($date);
         $data = $this->getDailyProgressData($targetDate);

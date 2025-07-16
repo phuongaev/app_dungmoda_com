@@ -123,6 +123,7 @@ class PosOrderController extends Controller
 
             // Filter theo trạng thái - có index
             $filter->equal('status', 'Trạng thái')->select(PosOrderStatus::getSelectOptions());
+            $filter->between('cod', 'Giá trị COD')->integer();
             
             // Filter theo nguồn
             // $filter->equal('order_sources', 'Nguồn đơn hàng')->select([

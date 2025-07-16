@@ -254,30 +254,8 @@ class TaskProgressDashboardWidget extends Widget
             $userTasks = DailyTask::where('is_active', 1)
                 ->get()
                 ->filter(function($task) use ($user, $userRoles, $date) {
-                    // Giả lập check isActiveToday cho ngày cụ thể
-                    $dayOfWeek = strtolower($date->format('l'));
-                    
-                    // Check date range
-                    if ($task->start_date && $date->lt($task->start_date)) return false;
-                    if ($task->end_date && $date->gt($task->end_date)) return false;
-                    
-                    // Check frequency
-                    $isActiveOnDate = false;
-                    switch ($task->frequency) {
-                        case 'daily':
-                            $isActiveOnDate = true;
-                            break;
-                        case 'weekdays':
-                            $isActiveOnDate = !$date->isWeekend();
-                            break;
-                        case 'weekends':
-                            $isActiveOnDate = $date->isWeekend();
-                            break;
-                        default:
-                            $isActiveOnDate = $task->frequency === $dayOfWeek;
-                    }
-                    
-                    return $isActiveOnDate && $task->isAssignedToUser($user->id, $userRoles);
+                    // Sử dụng method mới từ model
+                    return $task->isActiveOnDate($date) && $task->isAssignedToUser($user->id, $userRoles);
                 });
                 
             $totalTasks += $userTasks->count();
@@ -285,4 +263,7 @@ class TaskProgressDashboardWidget extends Widget
         
         return $totalTasks;
     }
+
+
+    
 }

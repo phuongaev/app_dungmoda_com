@@ -1,4 +1,5 @@
 <?php
+// app/Admin/Controllers/DailyTaskController.php
 
 namespace App\Admin\Controllers;
 
@@ -125,19 +126,8 @@ class DailyTaskController extends Controller
             
         $grid->column('frequency', __('Tần suất'))
             ->display(function ($frequency) {
-                $labels = [
-                    'daily' => 'Hàng ngày',
-                    'weekdays' => 'Ngày làm việc',
-                    'weekends' => 'Cuối tuần',
-                    'monday' => 'Thứ 2',
-                    'tuesday' => 'Thứ 3',
-                    'wednesday' => 'Thứ 4',
-                    'thursday' => 'Thứ 5',
-                    'friday' => 'Thứ 6',
-                    'saturday' => 'Thứ 7',
-                    'sunday' => 'Chủ nhật'
-                ];
-                return $labels[$frequency] ?? $frequency;
+                // Sử dụng accessor mới từ model
+                return $this->frequency_label;
             });
             
         $grid->column('suggested_time', __('Thời gian gợi ý'))
@@ -172,11 +162,10 @@ class DailyTaskController extends Controller
                 'high' => 'Cao',
                 'urgent' => 'Khẩn cấp'
             ]);
-            $filter->equal('frequency', 'Tần suất')->select([
-                'daily' => 'Hàng ngày',
-                'weekdays' => 'Ngày làm việc',
-                'weekends' => 'Cuối tuần'
-            ]);
+            // Cập nhật filter cho frequency - tạm thời đơn giản hóa
+            $filter->where(function ($query) {
+                $query->where('frequency', 'like', '%' . $this->input . '%');
+            }, 'Tần suất');
             $filter->equal('is_active', 'Trạng thái')->select([1 => 'Hoạt động', 0 => 'Tạm dừng']);
         });
 
@@ -233,7 +222,8 @@ class DailyTaskController extends Controller
         
         $form->number('estimated_minutes', __('Thời gian ước tính (phút)'));
         
-        $form->select('frequency', __('Tần suất thực hiện'))
+        // Cập nhật field frequency thành multipleSelect
+        $form->multipleSelect('frequency', __('Tần suất thực hiện'))
             ->options([
                 'daily' => 'Hàng ngày',
                 'weekdays' => 'Ngày làm việc (T2-T6)',
@@ -245,7 +235,9 @@ class DailyTaskController extends Controller
                 'friday' => 'Thứ 6',
                 'saturday' => 'Thứ 7',
                 'sunday' => 'Chủ nhật'
-            ])->default('daily');
+            ])
+            ->default(['daily'])
+            ->help('Chọn một hoặc nhiều tần suất. Ví dụ: Chọn "Thứ 2" và "Thứ 5" cho công việc làm 2 ngày/tuần.');
             
         $form->date('start_date', __('Ngày bắt đầu'));
         $form->date('end_date', __('Ngày kết thúc'));

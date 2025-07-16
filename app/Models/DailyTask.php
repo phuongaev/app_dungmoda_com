@@ -17,6 +17,7 @@ class DailyTask extends Model
     protected $casts = [
         'assigned_roles' => 'array',
         'assigned_users' => 'array',
+        'frequency' => 'array', // Thêm cast cho frequency
         'start_date' => 'date',
         'end_date' => 'date',
         'suggested_time' => 'datetime:H:i',
@@ -51,22 +52,54 @@ class DailyTask extends Model
     public function isActiveToday()
     {
         $today = Carbon::today();
-        $dayOfWeek = strtolower($today->format('l'));
+        return $this->isActiveOnDate($today);
+    }
 
+    // Check xem task có áp dụng cho ngày cụ thể không  
+    public function isActiveOnDate($date)
+    {
         // Check date range
-        if ($this->start_date && $today->lt($this->start_date)) return false;
-        if ($this->end_date && $today->gt($this->end_date)) return false;
+        if ($this->start_date && $date->lt($this->start_date)) return false;
+        if ($this->end_date && $date->gt($this->end_date)) return false;
 
-        // Check frequency
-        switch ($this->frequency) {
+        // Lấy frequency array
+        $frequencies = $this->frequency ?? [];
+        if (empty($frequencies)) return false;
+
+        $dayOfWeek = strtolower($date->format('l'));
+
+        // Check từng frequency trong array
+        foreach ($frequencies as $freq) {
+            if ($this->checkFrequencyMatch($freq, $date, $dayOfWeek)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check xem một frequency có match với ngày cụ thể không
+     */
+    private function checkFrequencyMatch($frequency, $date, $dayOfWeek)
+    {
+        switch ($frequency) {
             case 'daily':
                 return true;
             case 'weekdays':
-                return !$today->isWeekend();
+                return !$date->isWeekend();
             case 'weekends':
-                return $today->isWeekend();
+                return $date->isWeekend();
+            case 'monday':
+            case 'tuesday':
+            case 'wednesday':
+            case 'thursday':
+            case 'friday':
+            case 'saturday':
+            case 'sunday':
+                return $frequency === $dayOfWeek;
             default:
-                return $this->frequency === $dayOfWeek;
+                return false;
         }
     }
 
@@ -98,14 +131,32 @@ class DailyTask extends Model
         return $labels[$this->priority] ?? 'Trung bình';
     }
 
-    public function getPriorityColorAttribute()
+    /**
+     * Lấy label hiển thị cho frequency
+     */
+    public function getFrequencyLabelAttribute()
     {
-        $colors = [
-            'low' => '#28a745',
-            'medium' => '#ffc107',
-            'high' => '#fd7e14', 
-            'urgent' => '#dc3545'
+        $frequencies = $this->frequency ?? [];
+        if (empty($frequencies)) return '-';
+
+        $labels = [
+            'daily' => 'Hàng ngày',
+            'weekdays' => 'Ngày làm việc',
+            'weekends' => 'Cuối tuần',
+            'monday' => 'Thứ 2',
+            'tuesday' => 'Thứ 3',
+            'wednesday' => 'Thứ 4',
+            'thursday' => 'Thứ 5',
+            'friday' => 'Thứ 6',
+            'saturday' => 'Thứ 7',
+            'sunday' => 'Chủ nhật'
         ];
-        return $colors[$this->priority] ?? '#ffc107';
+
+        $displayLabels = [];
+        foreach ($frequencies as $freq) {
+            $displayLabels[] = $labels[$freq] ?? $freq;
+        }
+
+        return implode(', ', $displayLabels);
     }
 }
