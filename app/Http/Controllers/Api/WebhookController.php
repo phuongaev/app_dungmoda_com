@@ -90,4 +90,53 @@ class WebhookController extends Controller
         return response()->json(['key' => $key, 'value' => $value]);
     }
 
+
+
+    /**
+     * Handle webhook from Pos Pancake
+     *
+     * @param Request $request
+     * @return Response
+     */
+    public function handlePosPancake(Request $request)
+    {
+        try {
+            // Lấy toàn bộ payload JSON
+            $payload = $request->all();
+            
+            // Tạo log entry với timestamp và payload
+            $logData = [
+                'timestamp' => now()->toDateTimeString(),
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'payload' => $payload
+            ];
+            
+            // Ghi log vào file chuyên dụng cho Pos Pancake
+            Log::channel('pos_pancake')->info('Webhook received', $logData);
+            
+            // Trả về response thành công
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Webhook received successfully',
+                'timestamp' => now()->toDateTimeString()
+            ], 200);
+            
+        } catch (\Exception $e) {
+            // Log lỗi nếu có
+            Log::channel('pos_pancake')->error('Webhook error: ' . $e->getMessage(), [
+                'timestamp' => now()->toDateTimeString(),
+                'ip' => $request->ip(),
+                'payload' => $request->all(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Internal server error'
+            ], 500);
+        }
+    }
+
 }

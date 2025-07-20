@@ -395,18 +395,29 @@ class DailyTaskController extends Controller
     }
 
     /**
-     * Toggle review status - đơn giản chỉ 0/1
+     * Toggle review status - cập nhật để set status = in_process khi admin yêu cầu review
      */
     public function toggleReview($completionId, $status)
     {
         try {
             $completion = \App\Models\UserTaskCompletion::findOrFail($completionId);
             
-            $completion->update([
-                'review_status' => (int)$status
-            ]);
+            if ($status == 1) {
+                // Admin yêu cầu review: set review_status = 1, status = in_process
+                $completion->update([
+                    'review_status' => 1,
+                    'status' => 'in_process'
+                ]);
+                $message = 'Đã yêu cầu nhân viên kiểm tra lại công việc!';
+            } else {
+                // Admin hoàn thành review: set review_status = 0, status = completed
+                $completion->update([
+                    'review_status' => 0,
+                    'status' => 'completed'
+                ]);
+                $message = 'Đã xác nhận công việc hoàn thành!';
+            }
 
-            $message = $status == 1 ? 'Đã đánh dấu cần kiểm tra lại!' : 'Đã đánh dấu OK!';
             admin_toastr($message, 'success');
             
         } catch (\Exception $e) {

@@ -230,29 +230,54 @@ class DailyTask extends Model
     }
 
     /**
-     * Check xem one-time task đã quá hạn chưa
+     * Check xem one-time task đã quá hạn chưa (so với ngày hiện tại)
      */
-    public function isOverdue()
+    public function isOverdue($checkDate = null)
     {
+        // Chỉ áp dụng cho one-time tasks
         if ($this->task_type !== 'one_time' || !$this->end_date) {
             return false;
         }
 
-        return Carbon::today()->gt($this->end_date);
+        $checkDate = $checkDate ?: Carbon::today();
+        return $checkDate->gt($this->end_date);
     }
 
     /**
      * Check xem task đã được hoàn thành chưa (cho user cụ thể)
+     * Nếu không truyền $date thì check tất cả các ngày
      */
     public function isCompletedBy($userId, $date = null)
     {
-        $date = $date ?: Carbon::today();
+        $query = $this->completions()
+            ->where('user_id', $userId)
+            ->where('status', 'completed')
+            ->where(function($q) {
+                $q->where('review_status', 0)->orWhereNull('review_status');
+            });
         
+        // Nếu có date cụ thể thì filter theo date
+        if ($date) {
+            $query->where('completion_date', $date);
+        }
+        
+        return $query->exists();
+    }
+
+    /**
+     * Check xem task có cần review không (cho user cụ thể)
+     * Check tất cả completion records, không giới hạn ngày
+     */
+    public function needsReviewBy($userId)
+    {
         $completion = $this->completions()
             ->where('user_id', $userId)
-            ->where('completion_date', $date)
+            ->where('review_status', 1)
+            ->where('status', 'in_process')
             ->first();
             
-        return $completion && $completion->status === 'completed';
+        return (bool) $completion;
     }
+
+    
 }

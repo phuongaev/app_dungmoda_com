@@ -29,7 +29,7 @@ class DailyTaskAjaxController extends AdminController
             $taskId = $request->input('task_id');
             $isCompleted = filter_var($request->input('completed'), FILTER_VALIDATE_BOOLEAN);
             $notes = $request->input('notes', '');
-            $today = Carbon::today();
+            $today = Carbon::today()->format('Y-m-d'); // Đảm bảo format đúng
 
             // Validate task exists
             $task = DailyTask::find($taskId);
@@ -54,7 +54,8 @@ class DailyTaskAjaxController extends AdminController
                 $completion->update([
                     'status' => 'completed',
                     'completed_at_time' => $completionTime,
-                    'notes' => $notes
+                    'notes' => $notes,
+                    'review_status' => 0  // Reset review status khi hoàn thành
                 ]);
 
                 return response()->json([
@@ -64,14 +65,35 @@ class DailyTaskAjaxController extends AdminController
                     'task_id' => $taskId
                 ]);
             } else {
-                // Nếu bỏ check, xóa completion
-                UserTaskCompletion::where($attributes)->delete();
+                // Nếu bỏ check, thay vì xóa thì chuyển status thành 'in_process'
+                $completion = UserTaskCompletion::where($attributes)->first();
                 
-                return response()->json([
-                    'success' => true,
-                    'message' => "Đã bỏ đánh dấu: {$task->title}",
-                    'task_id' => $taskId
-                ]);
+                if ($completion) {
+                    $completion->update([
+                        'status' => 'in_process',
+                        'completed_at_time' => null  // Xóa thời gian hoàn thành
+                    ]);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'message' => "Đã chuyển trạng thái đang thực hiện: {$task->title}",
+                        'task_id' => $taskId
+                    ]);
+                } else {
+                    // Nếu chưa có record thì tạo mới với status in_process
+                    UserTaskCompletion::create(array_merge($attributes, [
+                        'status' => 'in_process',
+                        'completed_at_time' => null,
+                        'notes' => '',
+                        'review_status' => 0
+                    ]));
+                    
+                    return response()->json([
+                        'success' => true,
+                        'message' => "Đã bắt đầu thực hiện: {$task->title}",
+                        'task_id' => $taskId
+                    ]);
+                }
             }
 
         } catch (\Exception $e) {
@@ -99,7 +121,7 @@ class DailyTaskAjaxController extends AdminController
 
             $taskId = $request->input('task_id');
             $notes = $request->input('notes', '');
-            $today = Carbon::today();
+            $today = Carbon::today()->format('Y-m-d'); // Đảm bảo format đúng
 
             // Validate task exists
             $task = DailyTask::find($taskId);
@@ -117,7 +139,7 @@ class DailyTaskAjaxController extends AdminController
                     'completion_date' => $today
                 ],
                 [
-                    'status' => 'skipped', // Trạng thái mặc định khi chỉ thêm ghi chú
+                    'status' => 'in_process',  // Thay đổi từ 'skipped' thành 'in_process'
                     'review_status' => 0    // Mặc định không cần review
                 ]
             );
@@ -155,7 +177,7 @@ class DailyTaskAjaxController extends AdminController
             }
 
             $userId = $user->id;
-            $date = $request->input('date', Carbon::today());
+            $date = $request->input('date', Carbon::today()->format('Y-m-d')); // Đảm bảo format đúng
             $userRoles = $user->roles->pluck('slug')->toArray();
 
             // Get tasks for the date
@@ -170,8 +192,10 @@ class DailyTaskAjaxController extends AdminController
 
             $totalTasks = $tasks->count();
             $completedTasks = $tasks->filter(function($task) {
-                return $task->completions->isNotEmpty() && 
-                       $task->completions->first()->status === 'completed';
+                $completion = $task->completions->first();
+                return $completion && 
+                       $completion->status === 'completed' &&
+                       (!$completion->review_status || $completion->review_status == 0);
             })->count();
 
             $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
@@ -196,27 +220,18 @@ class DailyTaskAjaxController extends AdminController
     }
 
     /**
-     * Kiểm tra xem task có được assign cho user không
+     * Check if task is assigned to user
      */
     private function isTaskAssignedToUser($task, $userId, $userRoles)
     {
-        // Nếu không có assigned_users và assigned_roles thì assign cho tất cả
-        if (empty($task->assigned_users) && empty($task->assigned_roles)) {
+        // Check assigned_users
+        if ($task->assigned_users && in_array($userId, $task->assigned_users)) {
             return true;
         }
 
-        // Kiểm tra assigned_users
-        if (!empty($task->assigned_users) && in_array($userId, $task->assigned_users)) {
+        // Check assigned_roles
+        if ($task->assigned_roles && array_intersect($userRoles, $task->assigned_roles)) {
             return true;
-        }
-
-        // Kiểm tra assigned_roles
-        if (!empty($task->assigned_roles)) {
-            foreach ($userRoles as $role) {
-                if (in_array($role, $task->assigned_roles)) {
-                    return true;
-                }
-            }
         }
 
         return false;

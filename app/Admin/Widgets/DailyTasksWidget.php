@@ -47,41 +47,110 @@ class DailyTasksWidget extends Widget
                 // Khi modal đã bị ẩn đi (bằng bất kỳ cách nào)
                 \$noteModal.on('hidden.bs.modal', function() {
                     // Lấy checkbox đã kích hoạt modal (nếu có)
-                    var triggeringCheckbox = \$noteModal.data('triggeringCheckbox');
-
-                    // Nếu modal bị đóng mà không phải do bấm "Lưu" VÀ nó được kích hoạt bởi checkbox
-                    if (!modalSaved && triggeringCheckbox) {
-                        // Trả checkbox về trạng thái cũ (chưa check)
-                        triggeringCheckbox.prop('checked', false);
+                    var \$triggerCheckbox = \$(this).data('triggerCheckbox');
+                    
+                    // Nếu modal đóng mà chưa save => hoàn tác checkbox
+                    if (!modalSaved && \$triggerCheckbox) {
+                        var currentState = \$triggerCheckbox.prop('checked');
+                        \$triggerCheckbox.prop('checked', !currentState);
                     }
                     
-                    // Xóa tham chiếu sau khi xử lý xong
-                    \$noteModal.removeData('triggeringCheckbox');
+                    // Clean up
+                    \$(this).removeData('triggerCheckbox');
+                    \$(this).removeData('originalRequest');
                 });
 
-                // --- SỰ KIỆN NÚT LƯU TRONG MODAL ---
-                \$noteModal.on('click', '#save-task-note', function() {
-                    // Đánh dấu là đã bấm lưu
-                    modalSaved = true;
-
+                // --- CLICK CHỨC NĂNG SAVE NOTE TRONG MODAL ---
+                $('#save-task-note').on('click', function() {
                     var taskId = $('#modal-task-id').val();
                     var notes = $('#modal-task-notes').val();
                     
-                    var originalRequest = \$noteModal.data('originalRequest');
-                    
-                    \$noteModal.modal('hide');
-
-                    originalRequest.data.notes = notes;
-                    $.ajax(originalRequest);
+                    $.ajax({
+                        url: scriptConfig.addNoteUrl,
+                        method: 'POST',
+                        data: {
+                            task_id: taskId,
+                            notes: notes,
+                            _token: scriptConfig.csrfToken
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                modalSaved = true; // Đánh dấu đã save
+                                \$noteModal.modal('hide');
+                                
+                                // Thực hiện request gốc từ checkbox
+                                var originalRequest = \$noteModal.data('originalRequest');
+                                if (originalRequest) {
+                                    \$.ajax(originalRequest);
+                                }
+                                
+                                toastr.success('Đã lưu ghi chú!');
+                            } else {
+                                toastr.error(response.message || 'Có lỗi xảy ra!');
+                            }
+                        },
+                        error: function(xhr) { 
+                            console.log('Error:', xhr.responseText);
+                            toastr.error('Có lỗi kết nối!');
+                        }
+                    });
                 });
 
-                // --- SỰ KIỆN TOGGLE CHECKBOX ---
+                // --- CLICK TASK CHECKBOX ---
                 $('.task-checkbox').on('change', function() {
+                    var taskId = $(this).data('task-id');
+                    var isCompleted = $(this).prop('checked');
+                    var taskRow = $(this).closest('.task-item');
                     var checkbox = $(this);
-                    var taskId = checkbox.data('task-id');
-                    var isCompleted = checkbox.is(':checked');
-                    var taskRow = checkbox.closest('.task-item');
                     
+                    // Nếu bỏ check và task chưa có note => hiện modal
+                    if (!isCompleted) {
+                        var hasNote = taskRow.find('.note-link').length > 0;
+                        if (!hasNote) {
+                            // Lưu reference để có thể revert
+                            \$noteModal.data('triggerCheckbox', checkbox);
+                            
+                            var ajaxRequest = {
+                                url: scriptConfig.toggleUrl,
+                                method: 'POST',
+                                data: {
+                                    task_id: taskId,
+                                    completed: isCompleted,
+                                    notes: '',
+                                    _token: scriptConfig.csrfToken
+                                },
+                                success: function(response) {
+                                    if (response.success) {
+                                        taskRow.removeClass('task-completed');
+                                        taskRow.find('.completion-time').text('');
+                                        updateProgressBar();
+                                        toastr.success(response.message);
+                                        
+                                        // Reload trang sau 1 giây để cập nhật trạng thái
+                                        setTimeout(function() {
+                                            window.location.reload();
+                                        }, 1000);
+                                    } else {
+                                        checkbox.prop('checked', !isCompleted);
+                                        toastr.error(response.message || 'Có lỗi xảy ra!');
+                                    }
+                                },
+                                error: function(xhr) {
+                                    checkbox.prop('checked', !isCompleted);
+                                    console.log('Error:', xhr.responseText);
+                                    toastr.error('Có lỗi kết nối!');
+                                }
+                            };
+                            
+                            $('#modal-task-id').val(taskId);
+                            $('#modal-task-notes').val('').focus();
+                            \$noteModal.data('originalRequest', ajaxRequest);
+                            \$noteModal.modal('show');
+                            return;
+                        }
+                    }
+
+                    // Thực hiện toggle completion thông thường
                     var ajaxRequest = {
                         url: scriptConfig.toggleUrl,
                         method: 'POST',
@@ -95,6 +164,7 @@ class DailyTasksWidget extends Widget
                             if (response.success) {
                                 if (isCompleted) {
                                     taskRow.addClass('task-completed');
+                                    taskRow.removeClass('needs-review');
                                     taskRow.find('.completion-time').text('Hoàn thành lúc: ' + response.completion_time);
                                 } else {
                                     taskRow.removeClass('task-completed');
@@ -103,7 +173,7 @@ class DailyTasksWidget extends Widget
                                 updateProgressBar();
                                 toastr.success(response.message);
                                 
-                                // Reload trang sau 1 giây để cập nhật review tasks
+                                // Reload trang sau 1 giây để cập nhật trạng thái
                                 setTimeout(function() {
                                     window.location.reload();
                                 }, 1000);
@@ -119,78 +189,26 @@ class DailyTasksWidget extends Widget
                         }
                     };
 
-                    if (isCompleted) {
-                        // Mở modal để hỏi ghi chú
-                        $('#modal-task-id').val(taskId);
-                        $('#modal-task-notes').val('').focus();
-                        
-                        // Lưu request và cả checkbox đã kích hoạt nó
-                        \$noteModal.data('originalRequest', ajaxRequest);
-                        \$noteModal.data('triggeringCheckbox', checkbox);                        
-                        \$noteModal.modal('show');
-                    } else {
-                        // Nếu bỏ check, thực hiện AJAX ngay
-                        $.ajax(ajaxRequest);
-                    }
+                    $.ajax(ajaxRequest);
                 });
 
-                // --- CHẾ ĐỘ TẬP TRUNG ---
+                // Focus mode toggle
                 $('#focus-mode-toggle').on('change', function() {
                     if ($(this).is(':checked')) {
-                        $('.task-completed').slideUp();
+                        $('.task-completed').fadeOut();
                     } else {
-                        $('.task-completed').slideDown();
+                        $('.task-completed').fadeIn();
                     }
                 });
-                
-                // --- SỰ KIỆN NÚT "THÊM GHI CHÚ" (Tương tự, nhưng đơn giản hơn) ---
-                $('.add-note-btn').on('click', function() {
-                    var button = $(this);
-                    var taskId = button.data('task-id');
-                    var currentNote = button.data('current-note') || '';
-                    
-                    var ajaxRequest = {
-                        url: scriptConfig.addNoteUrl,
-                        method: 'POST',
-                        data: {
-                            task_id: taskId,
-                            notes: '', // Sẽ được điền sau
-                            _token: scriptConfig.csrfToken
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                var newNote = \$noteModal.data('originalRequest').data.notes;
-                                button.data('current-note', newNote);
-                                if (newNote) {
-                                    button.html('<i class="fa fa-comment"></i> Đã có ghi chú');
-                                } else {
-                                    button.html('<i class="fa fa-comment-o"></i> Thêm ghi chú');
-                                }
-                                toastr.success('Đã cập nhật ghi chú!');
-                            } else {
-                                toastr.error(response.message || 'Có lỗi xảy ra!');
-                            }
-                        },
-                        error: function(xhr) { 
-                            console.log('Error:', xhr.responseText);
-                            toastr.error('Có lỗi kết nối!');
-                        }
-                    };
-                    
-                    $('#modal-task-id').val(taskId);
-                    $('#modal-task-notes').val(currentNote).focus();
-                    \$noteModal.data('originalRequest', ajaxRequest);
-                    \$noteModal.modal('show');
-                });
 
-                // --- Hàm cập nhật thanh tiến trình (giữ nguyên) ---
+                // --- Hàm cập nhật thanh tiến trình ---
                 function updateProgressBar() {
                     var total = $('.task-checkbox').length;
                     var completed = $('.task-checkbox:checked').length;
                     var percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
                     
                     $('.progress-bar').css('width', percentage + '%');
-                    $('.progress-text').text(completed + '/' + total + ' công việc hoàn thành');
+                    $('.progress-text').text(completed + '/' + total);
                     
                     $('.progress-bar').removeClass('progress-bar-danger progress-bar-warning progress-bar-success');
                     if (percentage < 30) {
@@ -234,39 +252,88 @@ class DailyTasksWidget extends Widget
         $userRoles = $user->roles ? $user->roles->pluck('slug')->toArray() : [];
         $userId = $user->id;
             
-        // Lấy tất cả tasks active cho hôm nay (bao gồm cả recurring và one-time)
-        $tasks = DailyTask::with(['category', 'completions' => function($query) use ($userId, $today) {
-            $query->where('user_id', $userId)->where('completion_date', $today);
+        // Lấy tất cả tasks assigned cho user (load all completion data)
+        $allAssignedTasks = DailyTask::with(['category', 'completions' => function($query) use ($userId) {
+            $query->where('user_id', $userId); // Load tất cả completion của user, không filter ngày
         }])
         ->where('is_active', 1)
-        ->where(function($query) use ($today) {
-            $query->where(function($q) use ($today) {
-                $q->whereNull('start_date')->orWhere('start_date', '<=', $today);
-            })->where(function($q) use ($today) {
-                $q->whereNull('end_date')->orWhere('end_date', '>=', $today);
-            });
-        })
         ->orderBy('sort_order')
         ->orderBy('priority', 'desc')
         ->get()
         ->filter(function($task) use ($user, $userRoles) {
-            return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
+            return $task->isAssignedToUser($user->id, $userRoles);
         });
 
-        // Lấy thêm one-time tasks có completion với review_status = 1
-        $reviewTasks = DailyTask::with(['category', 'completions' => function($query) use ($userId) {
-            $query->where('user_id', $userId)->where('review_status', 1);
-        }])
-        ->where('is_active', 1)
-        ->where('task_type', 'one_time')
-        ->get()
-        ->filter(function($task) use ($userId, $userRoles) {
-            return $task->isAssignedToUser($userId, $userRoles) && 
-                   $task->completions->isNotEmpty();
+        // Filter tasks theo logic mới
+        $tasks = $allAssignedTasks->filter(function($task) use ($userId, $today) {
+            if ($task->task_type === 'recurring') {
+                // Recurring tasks: chỉ hiển thị nếu active hôm nay
+                return $task->isActiveOnDate($today);
+            } 
+            
+            if ($task->task_type === 'one_time') {
+                // One-time tasks: logic chi tiết
+                
+                // 1. Nếu task cần review: luôn hiển thị
+                if ($task->needsReviewBy($userId)) {
+                    return true;
+                }
+                
+                // 2. Check xem đã hoàn thành chưa (bất kỳ ngày nào)
+                $isCompleted = $task->isCompletedBy($userId);
+                
+                // 3. Nếu trong khoảng active (start_date ≤ today ≤ end_date)
+                if ($task->isActiveOnDate($today)) {
+                    // Nếu đã hoàn thành: chỉ hiển thị ở ngày hoàn thành
+                    if ($isCompleted) {
+                        $completionDate = $task->completions()
+                            ->where('user_id', $userId)
+                            ->where('status', 'completed')
+                            ->where(function($q) {
+                                $q->where('review_status', 0)->orWhereNull('review_status');
+                            })
+                            ->first();
+                        
+                        // Chỉ hiển thị nếu completion_date = today
+                        return $completionDate && $completionDate->completion_date->isSameDay($today);
+                    }
+                    
+                    // Nếu chưa hoàn thành: hiển thị bình thường
+                    return true;
+                }
+                
+                // 4. Nếu quá deadline: chỉ hiển thị nếu chưa hoàn thành
+                if ($task->isOverdue($today)) {
+                    return !$isCompleted;
+                }
+                
+                return false;
+            }
+            
+            return false;
         });
 
-        // Merge tasks hôm nay với tasks cần review (unique by id)
-        $allTasks = $tasks->merge($reviewTasks)->unique('id');
+        // Load completion data phù hợp cho từng loại task để hiển thị trong view
+        $tasks = $tasks->map(function($task) use ($userId, $today) {
+            if ($task->task_type === 'recurring') {
+                // Recurring task: query lại completion cho hôm nay để chắc chắn
+                $relevantCompletion = UserTaskCompletion::where('daily_task_id', $task->id)
+                    ->where('user_id', $userId)
+                    ->where('completion_date', $today->format('Y-m-d'))
+                    ->first();
+            } else {
+                // One-time task: load completion mới nhất (để hiển thị trạng thái)
+                $relevantCompletion = $task->completions->sortByDesc('created_at')->first();
+            }
+            
+            // Set completion data để blade view sử dụng
+            $task->setRelation('completions', $relevantCompletion ? collect([$relevantCompletion]) : collect([]));
+            
+            return $task;
+        });
+
+        // Không cần lấy thêm reviewTasks nữa vì đã bao gồm trong logic filter trên
+        $allTasks = $tasks;
 
         // Group tasks theo category 
         $groupedTasks = $allTasks->groupBy(function($task) {
@@ -275,42 +342,66 @@ class DailyTasksWidget extends Widget
             return $categoryName . $taskTypeLabel;
         });
 
-        // Tính toán thống kê 
+        // Tính toán thống kê - dựa trên completion hôm nay (chỉ cho recurring) hoặc trạng thái task (cho one-time)
         $totalTasks = $allTasks->count();
-        $completedTasks = $allTasks->filter(function($task) {
-            $completion = $task->completions->first();
-            // Task completed nếu có completion, status = completed và review_status = 0
-            return $completion && 
-                   $completion->status === 'completed' && 
-                   $completion->review_status == 0;
+        $completedTasks = $allTasks->filter(function($task) use ($userId, $today) {
+            if ($task->task_type === 'recurring') {
+                // Recurring: query lại completion hôm nay để chắc chắn
+                $todayCompletion = UserTaskCompletion::where('daily_task_id', $task->id)
+                    ->where('user_id', $userId)
+                    ->where('completion_date', $today->format('Y-m-d'))
+                    ->where('status', 'completed')
+                    ->where(function($q) {
+                        $q->where('review_status', 0)->orWhereNull('review_status');
+                    })
+                    ->exists();
+                return $todayCompletion;
+            } else {
+                // One-time: check trạng thái hoàn thành tổng thể
+                return $task->isCompletedBy($userId);
+            }
         })->count();
         
         $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
 
-        // Thống kê theo loại task
+        // Thống kê theo loại task (chỉ đếm tasks được hiển thị)
         $recurringTasks = $allTasks->where('task_type', 'recurring')->count();
         $oneTimeTasks = $allTasks->where('task_type', 'one_time')->count();
-        $overdueTasks = $allTasks->filter(function($task) {
-            return $task->isOverdue();
-        })->count();
         
-        // Đếm tasks cần review (có completion với review_status = 1)
+        // Đếm tasks cần review (dựa trên completion hiển thị)
         $reviewTasksCount = $allTasks->filter(function($task) {
-            $completion = $task->completions->first();
-            return $completion && $completion->review_status == 1;
+            $completion = $task->completions->first(); // Completion hiển thị
+            return $completion && 
+                   $completion->review_status == 1 && 
+                   $completion->status == 'in_process';
+        })->count();
+
+        // Đếm tasks đang trong quá trình thực hiện (dựa trên completion hiển thị)
+        $inProcessTasks = $allTasks->filter(function($task) {
+            $completion = $task->completions->first(); // Completion hiển thị
+            return $completion && 
+                   $completion->status == 'in_process' && 
+                   (!$completion->review_status || $completion->review_status == 0);
+        })->count();
+
+        // Đếm tasks quá hạn (one-time tasks đã quá deadline nhưng chưa hoàn thành)
+        $overdueTasks = $allTasks->filter(function($task) use ($today, $userId) {
+            return $task->task_type === 'one_time' && 
+                   $task->isOverdue($today) && 
+                   !$task->isCompletedBy($userId); // Check completion tổng thể, không chỉ hôm nay
         })->count();
 
         $data = [
             'groupedTasks' => $groupedTasks,
             'tasks' => $allTasks,
-            'reviewTasks' => $reviewTasks,
             'totalTasks' => $totalTasks,
             'completedTasks' => $completedTasks,
             'completionRate' => $completionRate,
             'recurringTasks' => $recurringTasks,
             'oneTimeTasks' => $oneTimeTasks,
-            'overdueTasks' => $overdueTasks,
             'reviewTasksCount' => $reviewTasksCount,
+            'inProcessTasks' => $inProcessTasks,
+            'overdueTasks' => $overdueTasks,
             'today' => $today
         ];
         

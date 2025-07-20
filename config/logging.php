@@ -113,6 +113,16 @@ return [
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
+
+
+        'pos_pancake' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/pos_pancake.log'),
+            'level' => 'debug',
+            'days' => 14, // Giữ log trong 14 ngày
+        ],
+
+        
     ],
 
 ];

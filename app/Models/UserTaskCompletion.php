@@ -15,7 +15,7 @@ class UserTaskCompletion extends Model
     protected $casts = [
         'completion_date' => 'date',
         'completed_at_time' => 'datetime:H:i:s',
-        'review_status' => 'boolean'
+        'review_status' => 'integer'  // Thay đổi từ boolean thành integer
     ];
 
     public function dailyTask()
@@ -33,7 +33,8 @@ class UserTaskCompletion extends Model
         $labels = [
             'completed' => 'Hoàn thành',
             'skipped' => 'Bỏ qua',
-            'failed' => 'Thất bại'
+            'failed' => 'Thất bại',
+            'in_process' => 'Đang thực hiện'
         ];
         return $labels[$this->status] ?? 'Hoàn thành';
     }
@@ -52,5 +53,35 @@ class UserTaskCompletion extends Model
     public function isOneTimeTask()
     {
         return $this->dailyTask && $this->dailyTask->task_type === 'one_time';
+    }
+
+    /**
+     * Check xem task có cần review không
+     */
+    public function needsReview()
+    {
+        return $this->review_status == 1 && $this->status == 'in_process';
+    }
+
+    /**
+     * Đánh dấu task cần review
+     */
+    public function markForReview()
+    {
+        $this->update([
+            'review_status' => 1,
+            'status' => 'in_process'
+        ]);
+    }
+
+    /**
+     * Hoàn thành review (admin đã kiểm tra)
+     */
+    public function completeReview()
+    {
+        $this->update([
+            'review_status' => 0,
+            'status' => 'completed'
+        ]);
     }
 }

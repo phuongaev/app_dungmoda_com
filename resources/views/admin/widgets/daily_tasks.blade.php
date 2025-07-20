@@ -42,6 +42,51 @@
     .task-list-widget .task-item.task-completed .task-meta {
         opacity: 0.6;
     }
+    
+    /* CSS mới cho tasks cần review */
+    .task-list-widget .task-item.needs-review { 
+        background-color: #fff3cd !important; 
+        border-left: 4px solid #ffc107;
+    }
+    .task-list-widget .task-item.needs-review .task-text { 
+        color: #856404; 
+        font-weight: 600;
+    }
+    .task-list-widget .task-item.needs-review:hover {
+        background-color: #ffeaa7 !important;
+    }
+    .task-list-widget .task-item.needs-review .review-badge {
+        background-color: #ffc107;
+        color: #212529;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: bold;
+        margin-left: 8px;
+    }
+    
+    /* CSS cho tasks quá hạn */
+    .task-list-widget .task-item.overdue { 
+        background-color: #f8d7da !important; 
+        border-left: 4px solid #dc3545;
+    }
+    .task-list-widget .task-item.overdue .task-text { 
+        color: #721c24; 
+        font-weight: 600;
+    }
+    .task-list-widget .task-item.overdue:hover {
+        background-color: #f5c6cb !important;
+    }
+    .task-list-widget .task-item.overdue .overdue-badge {
+        background-color: #dc3545;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: bold;
+        margin-left: 8px;
+    }
+    
     .task-list-widget .task-meta { 
         display: flex; 
         align-items: center; 
@@ -119,45 +164,80 @@
                         @foreach($tasks as $task)
                             @php
                                 $completion = $task->completions->first();
-                                $isCompleted = $completion && $completion->status === 'completed';
+                                $isCompleted = $completion && $completion->status === 'completed' && (!$completion->review_status || $completion->review_status == 0);
+                                $needsReview = $completion && $completion->review_status == 1 && $completion->status == 'in_process';
+                                $inProcess = $completion && $completion->status == 'in_process' && (!$completion->review_status || $completion->review_status == 0);
+                                $isOverdue = $task->task_type === 'one_time' && $task->isOverdue() && !$isCompleted;
                             @endphp
-                            <div class="task-item priority-{{ $task->priority }} {{ $isCompleted ? 'task-completed' : '' }}">
-                                <input type="checkbox" class="task-checkbox" data-task-id="{{ $task->id }}" {{ $isCompleted ? 'checked' : '' }}>
-                                <span class="task-text">
-                                    <!-- Giữ lại logic mới của anh cho icon Lửa -->
-                                    @if($task->priority === 'urgent' || $task->priority === 'high') <i class="fa fa-fire text-danger"></i> @endif
+                            <div class="task-item priority-{{ $task->priority }} 
+                                {{ $isCompleted ? 'task-completed' : '' }} 
+                                {{ $needsReview ? 'needs-review' : '' }}
+                                {{ $isOverdue ? 'overdue' : '' }}">
+                                
+                                <input type="checkbox" 
+                                       class="task-checkbox" 
+                                       data-task-id="{{ $task->id }}" 
+                                       {{ $isCompleted ? 'checked' : '' }}>
+                                
+                                <div class="task-text">
+                                    @if($task->priority === 'urgent' || $task->priority === 'high')
+                                    <i class="fa fa-fire text-danger"></i>
+                                    @endif
+                                    
                                     {{ $task->title }}
-                                </span>
-
-                                <!-- PHẦN HIỂN THỊ THÔNG TIN MỚI -->
+                                    
+                                    <!-- Badge cho task cần review hoặc overdue -->
+                                    @if($needsReview)
+                                        <span class="review-badge">
+                                            <i class="fa fa-exclamation-triangle"></i> CẦN REVIEW
+                                        </span>
+                                    @elseif($isOverdue)
+                                        <span class="overdue-badge">
+                                            <i class="fa fa-clock-o"></i> QUÁ HẠN
+                                        </span>
+                                    @elseif($inProcess)
+                                        <small class="text-muted">(đang thực hiện)</small>
+                                    @endif
+                                    
+                                    @if($task->priority === 'urgent')
+                                        <i class="fa fa-fire text-danger" title="Ưu tiên cao" style="margin-left: 5px;"></i>
+                                    @elseif($task->priority === 'high')
+                                        <i class="fa fa-exclamation-circle text-warning" title="Ưu tiên" style="margin-left: 5px;"></i>
+                                    @endif
+                                </div>
+                                
                                 <div class="task-meta">
-                                    @if($task->description)
-                                    <span class="meta-item info-icon" 
-                                          data-toggle="tooltip" 
-                                          data-placement="top" 
-                                          title="{{ e($task->description) }}">
-                                        <i class="fa fa-info-circle"></i>
-                                    </span>
-                                    @endif
                                     @if($task->suggested_time)
-                                    <span class="meta-item suggested-time">
-                                        <i class="fa fa-clock-o"></i> {{ \Carbon\Carbon::parse($task->suggested_time)->format('H:i') }}
-                                    </span>
+                                        <span class="meta-item">
+                                            <i class="fa fa-clock-o"></i>{{ date('H:i', strtotime($task->suggested_time)) }}
+                                        </span>
                                     @endif
-                                    @if($isCompleted && $completion->completed_at_time)
-                                    <span class="meta-item completed-time">
-                                        <i class="fa fa-check-circle"></i> {{ \Carbon\Carbon::parse($completion->completed_at_time)->format('H:i') }}
-                                    </span>
+                                    
+                                    @if($task->estimated_minutes)
+                                        <span class="meta-item">
+                                            <i class="fa fa-hourglass-half"></i>{{ $task->estimated_minutes }}p
+                                        </span>
                                     @endif
-                                    <span class="meta-item note-link">
-                                        <a href="javascript:void(0);" class="add-note-btn" data-task-id="{{ $task->id }}" data-current-note="{{ e(optional($completion)->notes) }}">
-                                            @if(optional($completion)->notes)
-                                                <i class="fa fa-comment" title="Sửa ghi chú: {{ e($completion->notes) }}"></i>
-                                            @else
-                                                <i class="fa fa-comment-o" title="Thêm ghi chú"></i>
-                                            @endif
-                                        </a>
-                                    </span>
+                                    
+                                    @if($completion && $completion->completed_at_time)
+                                        <span class="meta-item completed-time">
+                                            <i class="fa fa-check"></i>{{ $completion->completed_at_time->format('H:i') }}
+                                        </span>
+                                    @endif
+                                    
+                                    @if($completion && $completion->notes)
+                                        <span class="meta-item note-link">
+                                            <a href="#" data-toggle="tooltip" title="{{ $completion->notes }}">
+                                                <i class="fa fa-comment"></i>
+                                            </a>
+                                        </span>
+                                    @endif
+                                    
+                                    @if($task->description)
+                                        <span class="meta-item info-icon" data-toggle="tooltip" title="{{ $task->description }}">
+                                            <i class="fa fa-info-circle"></i>
+                                        </span>
+                                    @endif
                                 </div>
                             </div>
                         @endforeach
@@ -166,35 +246,34 @@
             </div>
             @endforeach
         @else
-            <div style="padding: 30px; text-align: center;">
-                <h4>Tuyệt vời!</h4>
-                <p class="text-muted">Hôm nay bạn không có công việc nào. Chúc một ngày tốt lành! 🎉</p>
+            <div style="padding: 20px; text-align: center; color: #7f8c8d;">
+                <i class="fa fa-inbox" style="font-size: 48px; margin-bottom: 10px; display: block;"></i>
+                <p>Không có công việc nào được giao hôm nay.</p>
             </div>
         @endif
     </div>
 </div>
 
-<!-- PHẦN MODAL ĐẦY ĐỦ -->
-<div class="modal fade" id="task-note-modal" tabindex="-1" role="dialog">
-    <div class="modal-dialog" role="document">
+<!-- Modal thêm ghi chú -->
+<div class="modal fade" id="task-note-modal" tabindex="-1">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title">Ghi chú công việc</h4>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title"><i class="fa fa-comment"></i> Ghi chú công việc</h4>
             </div>
             <div class="modal-body">
-                <form id="task-note-form" onsubmit="return false;">
-                    <input type="hidden" id="modal-task-id">
-                    <div class="form-group">
-                        <label for="modal-task-notes">Nội dung ghi chú (tùy chọn):</label>
-                        <textarea class="form-control" id="modal-task-notes" rows="4" placeholder="Nhập ghi chú của bạn..."></textarea>
-                    </div>
-                </form>
+                <input type="hidden" id="modal-task-id">
+                <div class="form-group">
+                    <label for="modal-task-notes">Ghi chú của bạn:</label>
+                    <textarea id="modal-task-notes" class="form-control" rows="4" placeholder="Nhập ghi chú về công việc này..."></textarea>
+                </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default pull-left" data-dismiss="modal">Hủy</button>
-                <!-- Giữ lại tên nút mới của anh -->
-                <button type="button" class="btn btn-primary" id="save-task-note">Hoàn thành</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" id="save-task-note">
+                    <i class="fa fa-save"></i> Lưu ghi chú
+                </button>
             </div>
         </div>
     </div>
