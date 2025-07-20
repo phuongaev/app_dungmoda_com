@@ -117,7 +117,8 @@ class DailyTaskAjaxController extends AdminController
                     'completion_date' => $today
                 ],
                 [
-                    'status' => 'skipped' // Trạng thái mặc định khi chỉ thêm ghi chú
+                    'status' => 'skipped', // Trạng thái mặc định khi chỉ thêm ghi chú
+                    'review_status' => 0    // Mặc định không cần review
                 ]
             );
 

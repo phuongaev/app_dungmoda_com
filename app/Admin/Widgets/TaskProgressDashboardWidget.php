@@ -20,6 +20,8 @@ class TaskProgressDashboardWidget extends Widget
         // Thống kê tổng quan
         $totalUsers = Administrator::count();
         $totalActiveTasks = DailyTask::where('is_active', 1)->count();
+        $totalRecurringTasks = DailyTask::where('is_active', 1)->where('task_type', 'recurring')->count();
+        $totalOneTimeTasks = DailyTask::where('is_active', 1)->where('task_type', 'one_time')->count();
         
         // Thống kê hoàn thành hôm nay
         $todayCompletions = UserTaskCompletion::whereDate('completion_date', $today)
@@ -42,9 +44,17 @@ class TaskProgressDashboardWidget extends Widget
         // Xu hướng 7 ngày qua
         $weeklyTrend = $this->getWeeklyTrend();
         
+        // Thống kê overdue one-time tasks
+        $overdueTasks = $this->getOverdueTasks();
+        
+        // Thống kê review status
+        $reviewStats = $this->getReviewStats();
+        
         return view($this->view, [
             'totalUsers' => $totalUsers,
             'totalActiveTasks' => $totalActiveTasks,
+            'totalRecurringTasks' => $totalRecurringTasks,
+            'totalOneTimeTasks' => $totalOneTimeTasks,
             'todayCompletions' => $todayCompletions,
             'todayAssignedTasks' => $todayAssignedTasks,
             'todayCompletionRate' => $todayCompletionRate,
@@ -52,6 +62,8 @@ class TaskProgressDashboardWidget extends Widget
             'incompleteUsers' => $incompleteUsers,
             'priorityStats' => $priorityStats,
             'weeklyTrend' => $weeklyTrend,
+            'overdueTasks' => $overdueTasks,
+            'reviewStats' => $reviewStats,
             'today' => $today
         ])->render();
     }
@@ -62,8 +74,15 @@ class TaskProgressDashboardWidget extends Widget
     protected function getTotalAssignedTasksToday()
     {
         $today = Carbon::today();
+        return $this->getTotalAssignedTasksForDate($today);
+    }
+
+    /**
+     * Tính tổng task được assign cho một ngày cụ thể
+     */
+    protected function getTotalAssignedTasksForDate($date)
+    {
         $totalTasks = 0;
-        
         $users = Administrator::with(['roles'])->get();
         
         foreach ($users as $user) {
@@ -71,8 +90,9 @@ class TaskProgressDashboardWidget extends Widget
             
             $userTasks = DailyTask::where('is_active', 1)
                 ->get()
-                ->filter(function($task) use ($user, $userRoles, $today) {
-                    return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
+                ->filter(function($task) use ($user, $userRoles, $date) {
+                    // Sử dụng method mới từ model - hỗ trợ cả recurring và one-time
+                    return $task->isActiveOnDate($date) && $task->isAssignedToUser($user->id, $userRoles);
                 });
                 
             $totalTasks += $userTasks->count();
@@ -100,7 +120,7 @@ class TaskProgressDashboardWidget extends Widget
             ->where('is_active', 1)
             ->get()
             ->filter(function($task) use ($user, $userRoles, $today) {
-                return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
+                return $task->isActiveOnDate($today) && $task->isAssignedToUser($user->id, $userRoles);
             });
             
             $totalTasks = $userTasks->count();
@@ -142,7 +162,7 @@ class TaskProgressDashboardWidget extends Widget
             ->where('is_active', 1)
             ->get()
             ->filter(function($task) use ($user, $userRoles, $today) {
-                return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
+                return $task->isActiveOnDate($today) && $task->isAssignedToUser($user->id, $userRoles);
             });
             
             $totalTasks = $userTasks->count();
@@ -162,7 +182,7 @@ class TaskProgressDashboardWidget extends Widget
             }
         }
         
-        return $incompleteUsers->sortByDesc('pending_tasks')->take(5);
+        return $incompleteUsers->sortByDesc('pending_tasks')->take(10);
     }
 
     /**
@@ -171,37 +191,26 @@ class TaskProgressDashboardWidget extends Widget
     protected function getPriorityStats()
     {
         $today = Carbon::today();
-        $priorities = ['urgent', 'high', 'medium', 'low'];
         $stats = [];
         
+        $priorities = ['urgent', 'high', 'medium', 'low'];
+        
         foreach ($priorities as $priority) {
-            $totalTasks = 0;
-            $completedTasks = 0;
-            
-            $users = Administrator::with(['roles'])->get();
-            
-            foreach ($users as $user) {
-                $userRoles = $user->roles->pluck('slug')->toArray();
-                
-                $userPriorityTasks = DailyTask::with(['completions' => function($query) use ($user, $today) {
-                    $query->where('user_id', $user->id)->where('completion_date', $today);
-                }])
-                ->where('is_active', 1)
+            $totalTasks = DailyTask::where('is_active', 1)
                 ->where('priority', $priority)
                 ->get()
-                ->filter(function($task) use ($user, $userRoles, $today) {
-                    return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
-                });
+                ->filter(function($task) use ($today) {
+                    return $task->isActiveOnDate($today);
+                })
+                ->count();
                 
-                $taskCount = $userPriorityTasks->count();
-                $completedCount = $userPriorityTasks->filter(function($task) {
-                    return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-                })->count();
+            $completedTasks = UserTaskCompletion::whereDate('completion_date', $today)
+                ->where('status', 'completed')
+                ->whereHas('task', function($query) use ($priority) {
+                    $query->where('priority', $priority);
+                })
+                ->count();
                 
-                $totalTasks += $taskCount;
-                $completedTasks += $completedCount;
-            }
-            
             $stats[$priority] = [
                 'total' => $totalTasks,
                 'completed' => $completedTasks,
@@ -213,7 +222,7 @@ class TaskProgressDashboardWidget extends Widget
     }
 
     /**
-     * Xu hướng 7 ngày qua
+     * Xu hướng hoàn thành 7 ngày qua
      */
     protected function getWeeklyTrend()
     {
@@ -227,6 +236,7 @@ class TaskProgressDashboardWidget extends Widget
                 ->count();
                 
             $dayAssignedTasks = $this->getTotalAssignedTasksForDate($date);
+            
             $dayRate = $dayAssignedTasks > 0 ? round(($dayCompletions / $dayAssignedTasks) * 100) : 0;
             
             $trend[] = [
@@ -241,29 +251,48 @@ class TaskProgressDashboardWidget extends Widget
     }
 
     /**
-     * Tính tổng task được assign cho một ngày cụ thể
+     * Lấy danh sách one-time tasks quá hạn
      */
-    protected function getTotalAssignedTasksForDate($date)
+    protected function getOverdueTasks()
     {
-        $totalTasks = 0;
-        $users = Administrator::with(['roles'])->get();
+        $today = Carbon::today();
         
-        foreach ($users as $user) {
-            $userRoles = $user->roles->pluck('slug')->toArray();
-            
-            $userTasks = DailyTask::where('is_active', 1)
-                ->get()
-                ->filter(function($task) use ($user, $userRoles, $date) {
-                    // Sử dụng method mới từ model
-                    return $task->isActiveOnDate($date) && $task->isAssignedToUser($user->id, $userRoles);
-                });
-                
-            $totalTasks += $userTasks->count();
-        }
-        
-        return $totalTasks;
+        return DailyTask::where('is_active', 1)
+            ->where('task_type', 'one_time')
+            ->where('end_date', '<', $today)
+            ->with(['category'])
+            ->get()
+            ->filter(function($task) {
+                // Chỉ lấy những task chưa được hoàn thành
+                $completed = UserTaskCompletion::where('daily_task_id', $task->id)
+                    ->where('status', 'completed')
+                    ->exists();
+                return !$completed;
+            });
     }
 
+    /**
+     * Thống kê review status cho one-time tasks  
+     */
+    protected function getReviewStats()
+    {
+        $needReviews = UserTaskCompletion::where('review_status', 1)
+            ->where('status', 'completed')
+            ->whereHas('dailyTask', function($q) {
+                $q->where('task_type', 'one_time');
+            })
+            ->count();
 
-    
+        $totalCompletedOneTime = UserTaskCompletion::where('status', 'completed')
+            ->whereHas('dailyTask', function($q) {
+                $q->where('task_type', 'one_time');
+            })
+            ->count();
+
+        return [
+            'need_review' => $needReviews,
+            'total_completed' => $totalCompletedOneTime,
+            'ok_tasks' => $totalCompletedOneTime - $needReviews
+        ];
+    }
 }

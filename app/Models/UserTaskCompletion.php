@@ -9,12 +9,13 @@ class UserTaskCompletion extends Model
 {
     protected $fillable = [
         'daily_task_id', 'user_id', 'completion_date', 
-        'completed_at_time', 'notes', 'status'
+        'completed_at_time', 'notes', 'status', 'review_status'
     ];
 
     protected $casts = [
         'completion_date' => 'date',
-        'completed_at_time' => 'datetime:H:i:s'
+        'completed_at_time' => 'datetime:H:i:s',
+        'review_status' => 'boolean'
     ];
 
     public function dailyTask()
@@ -35,5 +36,21 @@ class UserTaskCompletion extends Model
             'failed' => 'Thất bại'
         ];
         return $labels[$this->status] ?? 'Hoàn thành';
+    }
+
+    public function getReviewStatusBadgeAttribute()
+    {
+        if ($this->review_status) {
+            return '<span class="label label-warning">Cần kiểm tra lại</span>';
+        }
+        return '<span class="label label-success">OK</span>';
+    }
+
+    /**
+     * Check xem completion có phải của one-time task không
+     */
+    public function isOneTimeTask()
+    {
+        return $this->dailyTask && $this->dailyTask->task_type === 'one_time';
     }
 }

@@ -95,6 +95,8 @@ Route::group([
     $router->post('daily-tasks/ajax/toggle-completion', 'DailyTaskAjaxController@toggleCompletion');
     $router->post('daily-tasks/ajax/add-note', 'DailyTaskAjaxController@addNote');
     $router->get('daily-tasks/ajax/stats', 'DailyTaskAjaxController@getStats');
+    $router->get('daily-tasks/toggle-review/{completion}/{status}', 'DailyTaskController@toggleReview');
+    $router->post('daily-tasks/update-completion-note/{completion}', 'DailyTaskController@updateCompletionNote');
 
 
     ############# OrderController #############

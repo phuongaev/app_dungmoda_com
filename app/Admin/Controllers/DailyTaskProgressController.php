@@ -38,7 +38,7 @@ class DailyTaskProgressController extends Controller
         $user = Admin::user();
         $userRoles = $user->roles->pluck('slug')->toArray();
         
-        // Lấy tasks của user cho ngày đã chọn
+        // Lấy tasks của user cho ngày đã chọn (bao gồm cả recurring và one-time)
         $userTasks = DailyTask::with(['completions' => function($query) use ($user, $targetDate) {
             return $query->where('user_id', $user->id)->where('completion_date', $targetDate);
         }, 'category'])
@@ -47,19 +47,68 @@ class DailyTaskProgressController extends Controller
         ->orderBy('suggested_time')
         ->get()
         ->filter(function($task) use ($user, $userRoles, $targetDate) {
-            // Sử dụng method mới cho ngày cụ thể
+            // Sử dụng method mới cho ngày cụ thể - hỗ trợ cả recurring và one-time
             return $task->isActiveOnDate($targetDate) && $task->isAssignedToUser($user->id, $userRoles);
         });
-
         
-        $date = request('date', Carbon::today()->format('Y-m-d'));
-        $targetDate = Carbon::parse($date);
-        $data = $this->getDailyProgressData($targetDate);
+        $totalTasks = $userTasks->count();
+        $completedTasks = $userTasks->filter(function($task) {
+            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
+        })->count();
+        $skippedTasks = $userTasks->filter(function($task) {
+            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'skipped';
+        })->count();
+        $failedTasks = $userTasks->filter(function($task) {
+            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'failed';
+        })->count();
+        $pendingTasks = $totalTasks - $completedTasks - $skippedTasks - $failedTasks;
         
-        return $content
-            ->header('Tiến độ theo ngày')
-            ->description("Chi tiết tiến độ ngày {$targetDate->format('d/m/Y')}")
-            ->view('admin.daily-task-progress.daily', $data);
+        $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
+        
+        // Group by category và task type
+        $tasksByCategory = $userTasks->groupBy(function($task) {
+            $categoryName = $task->category ? $task->category->name : 'Không phân loại';
+            $taskTypeLabel = $task->task_type === 'one_time' ? ' (Một lần)' : '';
+            return $categoryName . $taskTypeLabel;
+        });
+        
+        // Priority stats
+        $priorityStats = [];
+        foreach (['urgent', 'high', 'medium', 'low'] as $priority) {
+            $priorityTasks = $userTasks->where('priority', $priority);
+            $priorityCompleted = $priorityTasks->filter(function($task) {
+                return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
+            })->count();
+            
+            $priorityStats[$priority] = [
+                'total' => $priorityTasks->count(),
+                'completed' => $priorityCompleted,
+                'rate' => $priorityTasks->count() > 0 ? round(($priorityCompleted / $priorityTasks->count()) * 100) : 0
+            ];
+        }
+        
+        // Task type stats
+        $recurringTasks = $userTasks->where('task_type', 'recurring')->count();
+        $oneTimeTasks = $userTasks->where('task_type', 'one_time')->count();
+        $overdueTasks = $userTasks->filter(function($task) {
+            return $task->isOverdue();
+        })->count();
+        
+        return view('admin.daily-task-progress.daily', [
+            'targetDate' => $targetDate,
+            'userTasks' => $userTasks,
+            'tasksByCategory' => $tasksByCategory,
+            'totalTasks' => $totalTasks,
+            'completedTasks' => $completedTasks,
+            'skippedTasks' => $skippedTasks,
+            'failedTasks' => $failedTasks,
+            'pendingTasks' => $pendingTasks,
+            'completionRate' => $completionRate,
+            'priorityStats' => $priorityStats,
+            'recurringTasks' => $recurringTasks,
+            'oneTimeTasks' => $oneTimeTasks,
+            'overdueTasks' => $overdueTasks
+        ]);
     }
 
     /**
@@ -194,13 +243,13 @@ class DailyTaskProgressController extends Controller
     }
 
     /**
-     * Lấy dữ liệu chi tiết user
+     * Lấy dữ liệu chi tiết user - cập nhật để hỗ trợ one-time tasks
      */
     protected function getUserDetailData($user, $targetDate)
     {
         $userRoles = $user->roles->pluck('slug')->toArray();
         
-        // Lấy tất cả tasks được assign cho user trong ngày
+        // Lấy tất cả tasks được assign cho user trong ngày (bao gồm cả recurring và one-time)
         $userTasks = DailyTask::with(['completions' => function($query) use ($user, $targetDate) {
             $query->where('user_id', $user->id)->where('completion_date', $targetDate);
         }, 'category'])
@@ -208,8 +257,9 @@ class DailyTaskProgressController extends Controller
         ->orderBy('priority', 'desc')
         ->orderBy('suggested_time')
         ->get()
-        ->filter(function($task) use ($user, $userRoles) {
-            return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
+        ->filter(function($task) use ($user, $userRoles, $targetDate) {
+            // Sử dụng method mới để check cả recurring và one-time tasks
+            return $task->isActiveOnDate($targetDate) && $task->isAssignedToUser($user->id, $userRoles);
         });
         
         $totalTasks = $userTasks->count();
@@ -226,9 +276,10 @@ class DailyTaskProgressController extends Controller
         
         $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
         
-        // Group by category
+        // Group by category với phân biệt task type
         $tasksByCategory = $userTasks->groupBy(function($task) {
-            return $task->category ? $task->category->name : 'Không phân loại';
+            $categoryName = $task->category ? $task->category->name : 'Không phân loại';
+            return $categoryName;
         });
         
         // Priority stats
@@ -247,8 +298,6 @@ class DailyTaskProgressController extends Controller
         }
         
         return [
-            'user' => $user,
-            'targetDate' => $targetDate,
             'userTasks' => $userTasks,
             'tasksByCategory' => $tasksByCategory,
             'totalTasks' => $totalTasks,

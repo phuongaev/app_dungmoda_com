@@ -102,6 +102,11 @@ class DailyTasksWidget extends Widget
                                 }
                                 updateProgressBar();
                                 toastr.success(response.message);
+                                
+                                // Reload trang sau 1 giây để cập nhật review tasks
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1000);
                             } else {
                                 checkbox.prop('checked', !isCompleted);
                                 toastr.error(response.message || 'Có lỗi xảy ra!');
@@ -166,7 +171,10 @@ class DailyTasksWidget extends Widget
                                 toastr.error(response.message || 'Có lỗi xảy ra!');
                             }
                         },
-                        error: function(xhr) { /* ... */ }
+                        error: function(xhr) { 
+                            console.log('Error:', xhr.responseText);
+                            toastr.error('Có lỗi kết nối!');
+                        }
                     };
                     
                     $('#modal-task-id').val(taskId);
@@ -206,12 +214,29 @@ class DailyTasksWidget extends Widget
         Admin::script($this->script());
 
         $user = Admin::user();
+        if (!$user) {
+            return view($this->view, [
+                'groupedTasks' => collect(),
+                'tasks' => collect(),
+                'reviewTasks' => collect(),
+                'totalTasks' => 0,
+                'completedTasks' => 0,
+                'completionRate' => 0,
+                'recurringTasks' => 0,
+                'oneTimeTasks' => 0,
+                'overdueTasks' => 0,
+                'reviewTasksCount' => 0,
+                'today' => Carbon::today()
+            ])->render();
+        }
+
         $today = Carbon::today();
-        
-        $userRoles = $user && $user->roles ? $user->roles->pluck('slug')->toArray() : [];
+        $userRoles = $user->roles ? $user->roles->pluck('slug')->toArray() : [];
+        $userId = $user->id;
             
-        $tasks = DailyTask::with(['category', 'completions' => function($query) use ($user, $today) {
-            $query->where('user_id', $user->id)->where('completion_date', $today);
+        // Lấy tất cả tasks active cho hôm nay (bao gồm cả recurring và one-time)
+        $tasks = DailyTask::with(['category', 'completions' => function($query) use ($userId, $today) {
+            $query->where('user_id', $userId)->where('completion_date', $today);
         }])
         ->where('is_active', 1)
         ->where(function($query) use ($today) {
@@ -228,24 +253,64 @@ class DailyTasksWidget extends Widget
             return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
         });
 
-        $groupedTasks = $tasks->groupBy(function($task) {
-            // Gom nhóm theo tên category, nếu không có thì cho vào nhóm "Chung"
-            return optional($task->category)->name ?? 'Công việc chung';
+        // Lấy thêm one-time tasks có completion với review_status = 1
+        $reviewTasks = DailyTask::with(['category', 'completions' => function($query) use ($userId) {
+            $query->where('user_id', $userId)->where('review_status', 1);
+        }])
+        ->where('is_active', 1)
+        ->where('task_type', 'one_time')
+        ->get()
+        ->filter(function($task) use ($userId, $userRoles) {
+            return $task->isAssignedToUser($userId, $userRoles) && 
+                   $task->completions->isNotEmpty();
         });
 
-        $totalTasks = $tasks->count();
-        $completedTasks = $tasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
+        // Merge tasks hôm nay với tasks cần review (unique by id)
+        $allTasks = $tasks->merge($reviewTasks)->unique('id');
+
+        // Group tasks theo category 
+        $groupedTasks = $allTasks->groupBy(function($task) {
+            $categoryName = optional($task->category)->name ?? 'Công việc chung';
+            $taskTypeLabel = $task->task_type === 'one_time' ? ' (Một lần)' : '';
+            return $categoryName . $taskTypeLabel;
+        });
+
+        // Tính toán thống kê 
+        $totalTasks = $allTasks->count();
+        $completedTasks = $allTasks->filter(function($task) {
+            $completion = $task->completions->first();
+            // Task completed nếu có completion, status = completed và review_status = 0
+            return $completion && 
+                   $completion->status === 'completed' && 
+                   $completion->review_status == 0;
         })->count();
         
         $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
 
+        // Thống kê theo loại task
+        $recurringTasks = $allTasks->where('task_type', 'recurring')->count();
+        $oneTimeTasks = $allTasks->where('task_type', 'one_time')->count();
+        $overdueTasks = $allTasks->filter(function($task) {
+            return $task->isOverdue();
+        })->count();
+        
+        // Đếm tasks cần review (có completion với review_status = 1)
+        $reviewTasksCount = $allTasks->filter(function($task) {
+            $completion = $task->completions->first();
+            return $completion && $completion->review_status == 1;
+        })->count();
+
         $data = [
             'groupedTasks' => $groupedTasks,
-            'tasks' => $tasks,
+            'tasks' => $allTasks,
+            'reviewTasks' => $reviewTasks,
             'totalTasks' => $totalTasks,
             'completedTasks' => $completedTasks,
             'completionRate' => $completionRate,
+            'recurringTasks' => $recurringTasks,
+            'oneTimeTasks' => $oneTimeTasks,
+            'overdueTasks' => $overdueTasks,
+            'reviewTasksCount' => $reviewTasksCount,
             'today' => $today
         ];
         

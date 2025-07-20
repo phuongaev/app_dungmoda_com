@@ -95,14 +95,29 @@ class DailyTaskController extends Controller
         $grid->column('title', __('Tiêu đề'))
             ->display(function ($title) {
                 $icon = $this->category->icon ?? 'fa-tasks';
-                return "<i class='fa {$icon}'></i> {$title}";
-            })->width(250);
+                
+                // Thêm icon phân biệt loại task
+                $typeIcon = $this->task_type === 'one_time' ? 'fa-clock-o' : 'fa-repeat';
+                $typeColor = $this->task_type === 'one_time' ? 'text-orange' : 'text-blue';
+                
+                return "<i class='fa {$icon}'></i> <i class='fa {$typeIcon} {$typeColor}' title='{$this->task_type_label}'></i> {$title}";
+            })->width(280);
             
         $grid->column('category.name', __('Danh mục'))
             ->display(function ($name) {
                 if (!$name) return '-';
                 $color = $this->category->color ?? '#007bff';
                 return "<span class='label' style='background-color: {$color}'>{$name}</span>";
+            });
+            
+        $grid->column('task_type', __('Loại'))
+            ->display(function ($taskType) {
+                $colors = [
+                    'recurring' => 'info',
+                    'one_time' => 'warning'
+                ];
+                $color = $colors[$taskType] ?? 'info';
+                return "<span class='label label-{$color}'>{$this->task_type_label}</span>";
             });
             
         $grid->column('priority', __('Ưu tiên'))
@@ -130,6 +145,33 @@ class DailyTaskController extends Controller
                 return $this->frequency_label;
             });
             
+        // Hiển thị khoảng thời gian
+        $grid->column('time_range', __('Khoảng thời gian'))
+            ->display(function () {
+                $start = $this->start_date ? $this->start_date->format('d/m/Y') : '';
+                $end = $this->end_date ? $this->end_date->format('d/m/Y') : '';
+                
+                if ($this->task_type === 'one_time') {
+                    // One-time task: start → deadline
+                    if ($start && $end) {
+                        return "{$start} → {$end}";
+                    } elseif ($end) {
+                        return "Deadline: {$end}";
+                    } else {
+                        return '-';
+                    }
+                } else {
+                    // Recurring task: start → end (hoặc vô hạn)
+                    if ($start && $end) {
+                        return "{$start} → {$end}";
+                    } elseif ($start) {
+                        return "Từ: {$start}";
+                    } else {
+                        return 'Không giới hạn';
+                    }
+                }
+            });
+            
         $grid->column('suggested_time', __('Thời gian gợi ý'))
             ->display(function ($time) {
                 return $time ? date('H:i', strtotime($time)) : '-';
@@ -153,16 +195,94 @@ class DailyTaskController extends Controller
                 return $active ? '<span class="label label-success">Hoạt động</span>' : '<span class="label label-danger">Tạm dừng</span>';
             });
 
+        // Hiển thị trạng thái hoàn thành cho one-time tasks
+        $grid->column('completion_status', __('Trạng thái hoàn thành'))
+            ->display(function () {
+                if ($this->task_type !== 'one_time') {
+                    return '<span class="text-muted">N/A</span>';
+                }
+
+                $completions = \App\Models\UserTaskCompletion::where('daily_task_id', $this->id)
+                    ->where('status', 'completed')
+                    ->with(['user'])
+                    ->get();
+
+                if ($completions->isEmpty()) {
+                    return '<span class="label label-default">Chưa hoàn thành</span>';
+                }
+
+                $html = '';
+                foreach ($completions as $completion) {
+                    $userName = $completion->user->name;
+                    $completedTime = $completion->completed_at_time ? $completion->completed_at_time->format('d/m H:i') : '';
+                    $reviewBadge = $completion->review_status_badge;
+                    
+                    $html .= "<div style='margin-bottom: 5px;'>";
+                    $html .= "<strong>{$userName}</strong> ({$completedTime})<br>";
+                    $html .= $reviewBadge;
+                    $html .= "</div>";
+                }
+
+                return $html;
+            })->width(200);
+
+        // Cột Review Actions - đơn giản không cần ghi chú
+        $grid->column('review_actions', __('Review Actions'))
+            ->display(function () {
+                if ($this->task_type !== 'one_time') {
+                    return '<span class="text-muted">N/A</span>';
+                }
+
+                $completions = \App\Models\UserTaskCompletion::where('daily_task_id', $this->id)
+                    ->where('status', 'completed')
+                    ->get();
+
+                if ($completions->isEmpty()) {
+                    return '<span class="text-muted">Chưa hoàn thành</span>';
+                }
+
+                $html = '';
+                foreach ($completions as $completion) {
+                    $userName = $completion->user->name;
+                    
+                    $html .= '<div style="margin-bottom: 10px;">';
+                    $html .= '<strong>' . $userName . '</strong><br>';
+                    
+                    if ($completion->review_status == 0) {
+                        // Chưa review → nút "Cần review"
+                        $html .= '<a href="' . admin_url("daily-tasks/toggle-review/{$completion->id}/1") . '" 
+                                   class="btn btn-xs btn-warning" 
+                                   onclick="return confirm(\'Đánh dấu cần kiểm tra lại?\')">
+                                   <i class="fa fa-exclamation-triangle"></i> Cần review
+                                 </a>';
+                    } else {
+                        // Đang cần review → nút "OK"
+                        $html .= '<span class="label label-warning">Đã yêu cầu review</span><br>';
+                        $html .= '<a href="' . admin_url("daily-tasks/toggle-review/{$completion->id}/0") . '" 
+                                   class="btn btn-xs btn-success" style="margin-top: 5px;">
+                                   <i class="fa fa-check"></i> Đánh dấu OK
+                                 </a>';
+                    }
+                    
+                    $html .= '</div>';
+                }
+
+                return $html;
+            })->width(150);
+
         $grid->filter(function($filter){
             $filter->like('title', 'Tiêu đề');
             $filter->equal('category_id', 'Danh mục')->select(TaskCategory::pluck('name', 'id'));
+            $filter->equal('task_type', 'Loại công việc')->select([
+                'recurring' => 'Lặp lại',
+                'one_time' => 'Một lần'
+            ]);
             $filter->equal('priority', 'Ưu tiên')->select([
                 'low' => 'Thấp',
                 'medium' => 'Trung bình',
                 'high' => 'Cao',
                 'urgent' => 'Khẩn cấp'
             ]);
-            // Cập nhật filter cho frequency - tạm thời đơn giản hóa
             $filter->where(function ($query) {
                 $query->where('frequency', 'like', '%' . $this->input . '%');
             }, 'Tần suất');
@@ -171,6 +291,7 @@ class DailyTaskController extends Controller
 
         $grid->actions(function ($actions) {
             $actions->disableView();
+            // Loại bỏ tất cả logic phức tạp, chỉ giữ disable view
         });
 
         return $grid;
@@ -222,7 +343,16 @@ class DailyTaskController extends Controller
         
         $form->number('estimated_minutes', __('Thời gian ước tính (phút)'));
         
-        // Cập nhật field frequency thành multipleSelect
+        // Radio chọn loại task
+        $form->radio('task_type', __('Loại công việc'))
+            ->options([
+                'recurring' => 'Lặp lại theo tần suất',
+                'one_time' => 'Thực hiện một lần trong khoảng thời gian'
+            ])
+            ->default('recurring')
+            ->help('• Lặp lại: Task sẽ lặp lại theo tần suất trong khoảng thời gian<br>• Một lần: Task chỉ cần hoàn thành 1 lần trong khoảng thời gian');
+            
+        // Frequency field  
         $form->multipleSelect('frequency', __('Tần suất thực hiện'))
             ->options([
                 'daily' => 'Hàng ngày',
@@ -237,10 +367,14 @@ class DailyTaskController extends Controller
                 'sunday' => 'Chủ nhật'
             ])
             ->default(['daily'])
-            ->help('Chọn một hoặc nhiều tần suất. Ví dụ: Chọn "Thứ 2" và "Thứ 5" cho công việc làm 2 ngày/tuần.');
+            ->help('Chọn tần suất cho công việc lặp lại. Bỏ qua nếu chọn "Thực hiện một lần"');
             
-        $form->date('start_date', __('Ngày bắt đầu'));
-        $form->date('end_date', __('Ngày kết thúc'));
+        // Date fields - dùng chung cho cả 2 loại
+        $form->date('start_date', __('Ngày bắt đầu'))
+            ->help('Ngày bắt đầu có thể thực hiện công việc');
+        $form->date('end_date', __('Ngày kết thúc / Deadline'))
+            ->help('• Lặp lại: Ngày kết thúc lặp lại (để trống = vô hạn)<br>• Một lần: Deadline phải hoàn thành');
+        
         
         $roles = cache()->remember('admin_roles', 3600, function() {
             return \Encore\Admin\Auth\Database\Role::pluck('name', 'slug')->toArray();
@@ -258,5 +392,28 @@ class DailyTaskController extends Controller
         $form->hidden('created_by')->default(Admin::user()->id);
 
         return $form;
+    }
+
+    /**
+     * Toggle review status - đơn giản chỉ 0/1
+     */
+    public function toggleReview($completionId, $status)
+    {
+        try {
+            $completion = \App\Models\UserTaskCompletion::findOrFail($completionId);
+            
+            $completion->update([
+                'review_status' => (int)$status
+            ]);
+
+            $message = $status == 1 ? 'Đã đánh dấu cần kiểm tra lại!' : 'Đã đánh dấu OK!';
+            admin_toastr($message, 'success');
+            
+        } catch (\Exception $e) {
+            \Log::error("Toggle review error: " . $e->getMessage());
+            admin_toastr('Có lỗi xảy ra: ' . $e->getMessage(), 'error');
+        }
+        
+        return redirect()->back();
     }
 }

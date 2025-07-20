@@ -10,14 +10,14 @@ class DailyTask extends Model
 {
     protected $fillable = [
         'title', 'description', 'category_id', 'priority', 'suggested_time',
-        'estimated_minutes', 'assigned_roles', 'assigned_users', 'frequency',
+        'estimated_minutes', 'assigned_roles', 'assigned_users', 'frequency', 'task_type',
         'start_date', 'end_date', 'is_required', 'is_active', 'sort_order', 'created_by'
     ];
 
     protected $casts = [
         'assigned_roles' => 'array',
         'assigned_users' => 'array',
-        'frequency' => 'array', // Thêm cast cho frequency
+        'frequency' => 'array',
         'start_date' => 'date',
         'end_date' => 'date',
         'suggested_time' => 'datetime:H:i',
@@ -58,6 +58,33 @@ class DailyTask extends Model
     // Check xem task có áp dụng cho ngày cụ thể không  
     public function isActiveOnDate($date)
     {
+        // Nếu là one-time task
+        if ($this->task_type === 'one_time') {
+            return $this->isOneTimeTaskActive($date);
+        }
+        
+        // Nếu là recurring task (logic cũ)
+        return $this->isRecurringTaskActive($date);
+    }
+
+    /**
+     * Check one-time task có active trên ngày cụ thể không
+     */
+    private function isOneTimeTaskActive($date)
+    {
+        // One-time task: start_date là ngày bắt đầu có thể làm, end_date là deadline
+        if ($this->start_date && $date->lt($this->start_date)) return false;
+        if ($this->end_date && $date->gt($this->end_date)) return false;
+        
+        // One-time task active trong khoảng start_date đến end_date
+        return true;
+    }
+
+    /**
+     * Check recurring task có active trên ngày cụ thể không  
+     */
+    private function isRecurringTaskActive($date)
+    {
         // Check date range
         if ($this->start_date && $date->lt($this->start_date)) return false;
         if ($this->end_date && $date->gt($this->end_date)) return false;
@@ -90,6 +117,9 @@ class DailyTask extends Model
                 return !$date->isWeekend();
             case 'weekends':
                 return $date->isWeekend();
+            case 'one_time':
+                // One-time frequency luôn trả về true (logic check date đã xử lý ở trên)
+                return true;
             case 'monday':
             case 'tuesday':
             case 'wednesday':
@@ -132,10 +162,28 @@ class DailyTask extends Model
     }
 
     /**
+     * Lấy label hiển thị cho task type
+     */
+    public function getTaskTypeLabelAttribute()
+    {
+        $labels = [
+            'recurring' => 'Lặp lại',
+            'one_time' => 'Một lần'
+        ];
+        return $labels[$this->task_type] ?? 'Lặp lại';
+    }
+
+    /**
      * Lấy label hiển thị cho frequency
      */
     public function getFrequencyLabelAttribute()
     {
+        // Nếu là one-time task
+        if ($this->task_type === 'one_time') {
+            return 'One Time';
+        }
+
+        // Nếu là recurring task
         $frequencies = $this->frequency ?? [];
         if (empty($frequencies)) return '-';
 
@@ -149,7 +197,8 @@ class DailyTask extends Model
             'thursday' => 'Thứ 5',
             'friday' => 'Thứ 6',
             'saturday' => 'Thứ 7',
-            'sunday' => 'Chủ nhật'
+            'sunday' => 'Chủ nhật',
+            'one_time' => 'One Time'
         ];
 
         $displayLabels = [];
@@ -158,5 +207,52 @@ class DailyTask extends Model
         }
 
         return implode(', ', $displayLabels);
+    }
+
+    /**
+     * Set frequency tự động khi save
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::saving(function ($task) {
+            // Nếu là one-time task, set frequency = ["one_time"]
+            if ($task->task_type === 'one_time') {
+                $task->frequency = ['one_time'];
+            } else {
+                // Nếu là recurring task mà chưa có frequency, set default
+                if (empty($task->frequency)) {
+                    $task->frequency = ['daily'];
+                }
+            }
+        });
+    }
+
+    /**
+     * Check xem one-time task đã quá hạn chưa
+     */
+    public function isOverdue()
+    {
+        if ($this->task_type !== 'one_time' || !$this->end_date) {
+            return false;
+        }
+
+        return Carbon::today()->gt($this->end_date);
+    }
+
+    /**
+     * Check xem task đã được hoàn thành chưa (cho user cụ thể)
+     */
+    public function isCompletedBy($userId, $date = null)
+    {
+        $date = $date ?: Carbon::today();
+        
+        $completion = $this->completions()
+            ->where('user_id', $userId)
+            ->where('completion_date', $date)
+            ->first();
+            
+        return $completion && $completion->status === 'completed';
     }
 }
