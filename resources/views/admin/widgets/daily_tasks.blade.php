@@ -43,7 +43,7 @@
         opacity: 0.6;
     }
     
-    /* CSS mới cho tasks cần review */
+    /* CSS cho tasks cần review */
     .task-list-widget .task-item.needs-review { 
         background-color: #fff3cd !important; 
         border-left: 4px solid #ffc107;
@@ -105,9 +105,16 @@
     }
     .task-list-widget .task-meta .meta-item.note-link a {
         color: #7f8c8d;
+        text-decoration: none;
+    }
+    .task-list-widget .task-meta .meta-item.note-link a:hover {
+        color: #3498db;
     }
     .task-list-widget .task-meta .meta-item.note-link .fa-comment { 
         color: #3498db; 
+    }
+    .task-list-widget .task-meta .meta-item.note-link .fa-comment-o { 
+        color: #7f8c8d; 
     }
     .task-list-widget .task-meta .meta-item.completed-time .fa { 
         color: #27ae60; 
@@ -118,20 +125,18 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        flex-wrap: wrap; /* Cho phép xuống dòng khi không đủ chỗ */
-        gap: 10px; /* Thêm khoảng cách giữa các item khi xuống dòng */
+        flex-wrap: wrap;
+        gap: 10px;
     }
     .responsive-box-header .box-title {
-        margin-bottom: 0; /* Reset margin bottom */
+        margin-bottom: 0;
     }
     .responsive-box-header .box-tools {
-        /* Bỏ float để flexbox kiểm soát */
         float: none !important; 
     }
 </style>
 
 <div class="box box-primary task-list-widget">
-    <!-- Cấu trúc HTML đã sửa lỗi responsive -->
     <div class="box-header with-border responsive-box-header">
         <h3 class="box-title" style="flex-grow: 1;"><i class="fa fa-tasks"></i> Công việc hôm nay</h3>
         <div class="box-tools">
@@ -165,8 +170,8 @@
                             @php
                                 $completion = $task->completions->first();
                                 $isCompleted = $completion && $completion->status === 'completed' && (!$completion->review_status || $completion->review_status == 0);
-                                $needsReview = $completion && $completion->review_status == 1 && $completion->status == 'in_process';
-                                $inProcess = $completion && $completion->status == 'in_process' && (!$completion->review_status || $completion->review_status == 0);
+                                $needsReview = $completion && $completion->review_status == 1;
+                                $inProcess = $completion && $completion->status == 'in_process';
                                 $isOverdue = $task->task_type === 'one_time' && $task->isOverdue() && !$isCompleted;
                             @endphp
                             <div class="task-item priority-{{ $task->priority }} 
@@ -186,7 +191,7 @@
                                     
                                     {{ $task->title }}
                                     
-                                    <!-- Badge cho task cần review hoặc overdue -->
+                                    <!-- Badge cho các trạng thái đặc biệt -->
                                     @if($needsReview)
                                         <span class="review-badge">
                                             <i class="fa fa-exclamation-triangle"></i> CẦN REVIEW
@@ -225,13 +230,20 @@
                                         </span>
                                     @endif
                                     
-                                    @if($completion && $completion->notes)
-                                        <span class="meta-item note-link">
-                                            <a href="#" data-toggle="tooltip" title="{{ $completion->notes }}">
+                                    <!-- Icon ghi chú -->
+                                    <span class="meta-item note-link">
+                                        <a href="javascript:void(0);" 
+                                           class="add-note-btn" 
+                                           data-task-id="{{ $task->id }}" 
+                                           data-current-note="{{ e(optional($completion)->notes) }}"
+                                           title="{{ optional($completion)->notes ? 'Xem/Sửa ghi chú: ' . $completion->notes : 'Thêm ghi chú' }}">
+                                            @if(optional($completion)->notes)
                                                 <i class="fa fa-comment"></i>
-                                            </a>
-                                        </span>
-                                    @endif
+                                            @else
+                                                <i class="fa fa-comment-o"></i>
+                                            @endif
+                                        </a>
+                                    </span>
                                     
                                     @if($task->description)
                                         <span class="meta-item info-icon" data-toggle="tooltip" title="{{ $task->description }}">
@@ -266,7 +278,14 @@
                 <input type="hidden" id="modal-task-id">
                 <div class="form-group">
                     <label for="modal-task-notes">Ghi chú của bạn:</label>
-                    <textarea id="modal-task-notes" class="form-control" rows="4" placeholder="Nhập ghi chú về công việc này..."></textarea>
+                    <textarea id="modal-task-notes" 
+                              class="form-control" 
+                              rows="4" 
+                              placeholder="Nhập ghi chú về công việc này... (Ví dụ: Gọi khách hàng ABC lúc 15:00, Cần chuẩn bị tài liệu XYZ, etc.)"></textarea>
+                    <small class="text-muted">
+                        <i class="fa fa-info-circle"></i> 
+                        Ghi chú này sẽ hiển thị cho tất cả mọi người có thể xem task.
+                    </small>
                 </div>
             </div>
             <div class="modal-footer">
