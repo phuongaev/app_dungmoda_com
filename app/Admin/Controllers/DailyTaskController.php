@@ -1,10 +1,13 @@
 <?php
-// app/Admin/Controllers/DailyTaskController.php
+// app/Admin/Controllers/DailyTaskController.php (Optimized)
 
 namespace App\Admin\Controllers;
 
 use App\Models\DailyTask;
 use App\Models\TaskCategory;
+use App\Models\UserTaskCompletion;
+use App\Services\TaskService;
+use App\Repositories\TaskRepository;
 use Encore\Admin\Controllers\AdminController;
 use App\Http\Controllers\Controller;
 use Encore\Admin\Controllers\HasResourceActions;
@@ -13,12 +16,21 @@ use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
 use Encore\Admin\Facades\Admin;
+use Illuminate\Http\Request;
 
 class DailyTaskController extends Controller
 {
     use HasResourceActions;
 
     protected $title = 'Công việc hàng ngày';
+    protected $taskService;
+    protected $taskRepository;
+
+    public function __construct(TaskService $taskService, TaskRepository $taskRepository)
+    {
+        $this->taskService = $taskService;
+        $this->taskRepository = $taskRepository;
+    }
 
     public function index(Content $content)
     {
@@ -55,7 +67,7 @@ class DailyTaskController extends Controller
     protected function grid()
     {
         $grid = new Grid(new DailyTask());
-        $grid->model()->orderBy('id', 'desc');
+        $grid->model()->with(['category', 'creator'])->orderBy('id', 'desc');
         
         $grid->column('id', 'ID')->sortable();
         
@@ -76,31 +88,28 @@ class DailyTaskController extends Controller
             $colors = ['low' => 'success', 'medium' => 'info', 'high' => 'warning', 'urgent' => 'danger'];
             $labels = ['low' => 'Thấp', 'medium' => 'Trung bình', 'high' => 'Cao', 'urgent' => 'Khẩn cấp'];
             $color = $colors[$priority] ?? 'info';
-            $label = $labels[$priority] ?? 'Trung bình';
-            return "<span class='label label-{$color}'>{$label}</span>";
-        });
-            
-        $grid->column('task_type', 'Loại')->display(function ($taskType) {
-            $colors = ['recurring' => 'info', 'one_time' => 'warning'];
-            $labels = ['recurring' => 'Lặp lại', 'one_time' => 'Một lần'];
-            $color = $colors[$taskType] ?? 'info';
-            $label = $labels[$taskType] ?? 'Lặp lại';
+            $label = $labels[$priority] ?? $priority;
             return "<span class='label label-{$color}'>{$label}</span>";
         });
 
-        $grid->column('date_range', 'Thời gian')->display(function () {
-            $start = $this->start_date ? $this->start_date->format('d/m/Y') : '';
-            $end = $this->end_date ? $this->end_date->format('d/m/Y') : '';
-            
-            if ($this->task_type === 'one_time') {
-                return $start && $end ? "{$start} → {$end}" : ($end ? "Deadline: {$end}" : '-');
-            } else {
-                return $start && $end ? "{$start} → {$end}" : ($start ? "Từ: {$start}" : 'Không giới hạn');
-            }
+        $grid->column('task_type', 'Loại')->display(function ($type) {
+            $color = $type === 'one_time' ? 'warning' : 'info';
+            $label = $type === 'one_time' ? 'One Time' : 'Lặp lại';
+            return "<span class='label label-{$color}'>{$label}</span>";
         });
-            
-        $grid->column('suggested_time', 'Thời gian gợi ý')->display(function ($time) {
-            return $time ? date('H:i', strtotime($time)) : '-';
+
+        $grid->column('frequency_label', 'Tần suất')->display(function () {
+            return $this->frequency_label;
+        });
+
+        $grid->column('suggested_time', 'Giờ đề xuất')->display(function ($time) {
+            if (!$time) return '-';
+            // Kiểm tra nếu là string thì parse thành datetime trước
+            if (is_string($time)) {
+                return date('H:i', strtotime($time));
+            }
+            // Nếu là datetime object thì dùng format
+            return $time->format('H:i');
         });
             
         $grid->column('assigned_users', 'Người được giao')->display(function ($users) {
@@ -113,7 +122,6 @@ class DailyTaskController extends Controller
                             '<span class="label label-danger">Tạm dừng</span>';
         });
 
-        // Completion status for one-time tasks only
         $grid->column('completion_status', 'Trạng thái hoàn thành')->display(function () {
             if ($this->task_type !== 'one_time') {
                 return '<span class="text-muted">N/A</span>';
@@ -145,7 +153,6 @@ class DailyTaskController extends Controller
             return $html;
         })->width(200);
 
-        // Review actions for one-time tasks
         $grid->column('review_actions', 'Review Actions')->display(function () {
             if ($this->task_type !== 'one_time') {
                 return '<span class="text-muted">N/A</span>';
@@ -167,48 +174,67 @@ class DailyTaskController extends Controller
                 $html .= '<strong>' . $userName . '</strong><br>';
                 
                 if (!$completion->review_status) {
-                    $html .= '<a href="' . admin_url("daily-tasks/toggle-review/{$completion->id}/1") . '" 
-                               class="btn btn-xs btn-warning" 
-                               onclick="return confirm(\'Đánh dấu cần review?\')">
-                               <i class="fa fa-exclamation-triangle"></i> Cần review
-                             </a>';
+                    $html .= '<a href="' . admin_url("daily-tasks/toggle-review/{$completion->id}/1") . '"';
+                    $html .= ' class="btn btn-xs btn-warning">Cần review</a>';
                 } else {
-                    $html .= '<span class="label label-warning">Đã yêu cầu review</span><br>';
-                    $html .= '<a href="' . admin_url("daily-tasks/toggle-review/{$completion->id}/0") . '" 
-                               class="btn btn-xs btn-success" style="margin-top: 5px;">
-                               <i class="fa fa-check"></i> Đánh dấu OK
-                             </a>';
+                    $html .= '<a href="' . admin_url("daily-tasks/toggle-review/{$completion->id}/0") . '"';
+                    $html .= ' class="btn btn-xs btn-success">Xác nhận OK</a>';
                 }
                 $html .= '</div>';
             }
             return $html;
         })->width(150);
 
-        $grid->filter(function($filter){
-            $filter->like('title', 'Tiêu đề');
-            $filter->equal('category_id', 'Danh mục')->select(TaskCategory::pluck('name', 'id'));
-            $filter->equal('task_type', 'Loại')->select(['recurring' => 'Lặp lại', 'one_time' => 'Một lần']);
-            $filter->equal('priority', 'Ưu tiên')->select([
-                'low' => 'Thấp', 'medium' => 'Trung bình', 'high' => 'Cao', 'urgent' => 'Khẩn cấp'
-            ]);
-            $filter->equal('is_active', 'Trạng thái')->select([1 => 'Hoạt động', 0 => 'Tạm dừng']);
-        });
+        $this->configureGridActions($grid);
+        $this->configureGridFilters($grid);
 
+        return $grid;
+    }
+
+    private function configureGridActions($grid)
+    {
         $grid->actions(function ($actions) {
             $actions->disableView();
         });
 
-        return $grid;
+        $grid->batchActions(function ($batch) {
+            $batch->disableDelete();
+        });
+    }
+
+    private function configureGridFilters($grid)
+    {
+        $grid->filter(function($filter) {
+            $filter->disableIdFilter();
+            
+            $filter->like('title', 'Tiêu đề');
+            $filter->equal('category_id', 'Danh mục')->select(TaskCategory::pluck('name', 'id'));
+            $filter->equal('priority', 'Độ ưu tiên')->select($this->getPriorityOptions());
+            $filter->equal('task_type', 'Loại task')->select(['recurring' => 'Lặp lại', 'one_time' => 'One Time']);
+            $filter->equal('is_active', 'Trạng thái')->select([1 => 'Hoạt động', 0 => 'Tạm dừng']);
+        });
     }
 
     protected function detail($id)
     {
         $show = new Show(DailyTask::findOrFail($id));
-        $show->id('ID');
-        $show->title('Tiêu đề');
-        $show->description('Mô tả');
-        $show->created_at('Tạo lúc');
-        $show->updated_at('Cập nhật lúc');
+
+        $show->field('id', 'ID');
+        $show->field('title', 'Tiêu đề');
+        $show->field('description', 'Mô tả');
+        $show->field('category.name', 'Danh mục');
+        $show->field('priority', 'Ưu tiên')->using($this->getPriorityLabels());
+        $show->field('task_type', 'Loại task')->using(['recurring' => 'Lặp lại', 'one_time' => 'One Time']);
+        $show->field('frequency_label', 'Tần suất');
+        $show->field('suggested_time', 'Giờ đề xuất');
+        $show->field('estimated_minutes', 'Thời gian ước tính (phút)');
+        $show->field('start_date', 'Ngày bắt đầu');
+        $show->field('end_date', 'Ngày kết thúc');
+        $show->field('is_required', 'Bắt buộc')->using([0 => 'Không', 1 => 'Có']);
+        $show->field('is_active', 'Hoạt động')->using([0 => 'Không', 1 => 'Có']);
+        $show->field('created_at', 'Ngày tạo');
+        $show->field('updated_at', 'Ngày cập nhật');
+
         return $show;
     }
 
@@ -218,63 +244,115 @@ class DailyTaskController extends Controller
 
         $form->text('title', 'Tiêu đề')->required();
         $form->textarea('description', 'Mô tả');
-        $form->select('category_id', 'Danh mục')->options(TaskCategory::pluck('name', 'id'));
-        $form->select('priority', 'Ưu tiên')->options([
-            'low' => 'Thấp', 'medium' => 'Trung bình', 'high' => 'Cao', 'urgent' => 'Khẩn cấp'
-        ])->default('medium');
         
-        $form->time('suggested_time', 'Thời gian gợi ý');
-        $form->number('estimated_minutes', 'Thời gian ước tính (phút)');
-        
-        $form->radio('task_type', 'Loại công việc')->options([
-            'recurring' => 'Lặp lại theo lịch trình',
-            'one_time' => 'Thực hiện một lần'
-        ])->default('recurring');
-
-        $form->checkbox('frequency', 'Tần suất (chỉ cho lặp lại)')->options([
-            'daily' => 'Hàng ngày', 'weekdays' => 'Ngày làm việc', 'weekends' => 'Cuối tuần',
-            'monday' => 'Thứ 2', 'tuesday' => 'Thứ 3', 'wednesday' => 'Thứ 4',
-            'thursday' => 'Thứ 5', 'friday' => 'Thứ 6', 'saturday' => 'Thứ 7', 'sunday' => 'Chủ nhật'
-        ])->when('recurring', function (Form $form) {
-            $form->checkbox('frequency')->required();
-        });
-
-        $form->date('start_date', 'Ngày bắt đầu');
-        $form->date('end_date', 'Ngày kết thúc / Deadline');
-        
-        $roles = cache()->remember('admin_roles', 3600, function() {
-            return \Encore\Admin\Auth\Database\Role::pluck('name', 'slug')->toArray();
-        });
-        $form->checkbox('assigned_roles', 'Vai trò được giao')->options($roles);
-        $form->multipleSelect('assigned_users', 'Người cụ thể được giao')
-            ->options(\Encore\Admin\Auth\Database\Administrator::pluck('name', 'id'));
+        $form->select('category_id', 'Danh mục')
+            ->options(TaskCategory::where('is_active', 1)->pluck('name', 'id'))
+            ->required();
             
-        $form->switch('is_required', 'Bắt buộc hoàn thành')->default(1);
-        $form->switch('is_active', 'Trạng thái hoạt động')->default(1);
+        $form->select('priority', 'Độ ưu tiên')
+            ->options($this->getPriorityOptions())
+            ->default('medium')
+            ->required();
+
+        $form->select('task_type', 'Loại task')
+            ->options(['recurring' => 'Lặp lại', 'one_time' => 'One Time'])
+            ->default('recurring')
+            ->required();
+
+        $form->multipleSelect('frequency', 'Tần suất')
+            ->options($this->getFrequencyOptions())
+            ->when('recurring', function (Form $form) {
+                $form->multipleSelect('frequency', 'Tần suất')
+                    ->options($this->getFrequencyOptions())
+                    ->required();
+            });
+
+        $form->time('suggested_time', 'Giờ đề xuất');
+        $form->number('estimated_minutes', 'Thời gian ước tính (phút)')->min(1);
+        
+        $form->date('start_date', 'Ngày bắt đầu');
+        $form->date('end_date', 'Ngày kết thúc');
+        
+        $form->multipleSelect('assigned_roles', 'Vai trò được giao')
+            ->options($this->getRoleOptions());
+            
+        $form->multipleSelect('assigned_users', 'Người dùng cụ thể')
+            ->options($this->getUserOptions());
+
+        $form->switch('is_required', 'Bắt buộc')->default(1);
+        $form->switch('is_active', 'Hoạt động')->default(1);
         $form->number('sort_order', 'Thứ tự sắp xếp')->default(0);
+
         $form->hidden('created_by')->default(Admin::user()->id);
 
         return $form;
     }
 
+    // Review actions
     public function toggleReview($completionId, $status)
     {
         try {
-            $completion = \App\Models\UserTaskCompletion::findOrFail($completionId);
-            
-            if ($status == 1) {
-                $completion->update(['review_status' => 1, 'status' => 'in_process']);
-                $message = 'Đã yêu cầu nhân viên kiểm tra lại!';
-            } else {
-                $completion->update(['review_status' => 0, 'status' => 'completed']);
-                $message = 'Đã xác nhận hoàn thành!';
-            }
-
-            admin_toastr($message, 'success');
+            $result = $this->taskService->toggleReviewStatus($completionId, $status);
+            admin_toastr($result['message'], 'success');
         } catch (\Exception $e) {
             admin_toastr('Có lỗi xảy ra: ' . $e->getMessage(), 'error');
         }
-        
-        return redirect()->back();
+
+        return back();
+    }
+
+    public function updateCompletionNote(Request $request, $completionId)
+    {
+        try {
+            $completion = UserTaskCompletion::findOrFail($completionId);
+            $completion->update(['notes' => $request->input('notes', '')]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã cập nhật ghi chú thành công!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Helper methods for options
+    private function getPriorityOptions()
+    {
+        return ['low' => 'Thấp', 'medium' => 'Trung bình', 'high' => 'Cao', 'urgent' => 'Khẩn cấp'];
+    }
+
+    private function getPriorityLabels()
+    {
+        return ['low' => 'Thấp', 'medium' => 'Trung bình', 'high' => 'Cao', 'urgent' => 'Khẩn cấp'];
+    }
+
+    private function getFrequencyOptions()
+    {
+        return [
+            'daily' => 'Hàng ngày',
+            'weekdays' => 'Ngày làm việc',
+            'weekends' => 'Cuối tuần',
+            'monday' => 'Thứ 2',
+            'tuesday' => 'Thứ 3',
+            'wednesday' => 'Thứ 4',
+            'thursday' => 'Thứ 5',
+            'friday' => 'Thứ 6',
+            'saturday' => 'Thứ 7',
+            'sunday' => 'Chủ nhật'
+        ];
+    }
+
+    private function getRoleOptions()
+    {
+        return \Encore\Admin\Auth\Database\Role::pluck('name', 'slug')->toArray();
+    }
+
+    private function getUserOptions()
+    {
+        return \Encore\Admin\Auth\Database\Administrator::pluck('name', 'id')->toArray();
     }
 }

@@ -1,19 +1,30 @@
 <?php
-// app/Admin/Controllers/DailyTaskProgressController.php
+// app/Admin/Controllers/DailyTaskProgressController.php (Optimized - Clean)
 
 namespace App\Admin\Controllers;
 
 use App\Models\DailyTask;
 use App\Models\UserTaskCompletion;
+use App\Services\TaskService;
+use App\Repositories\TaskRepository;
 use Encore\Admin\Auth\Database\Administrator;
 use App\Http\Controllers\Controller;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Facades\Admin;
+use Illuminate\Http\Request;
 use Carbon\Carbon;
 
 class DailyTaskProgressController extends Controller
 {
     protected $title = 'Tiến độ hoàn thành công việc nhân viên';
+    protected $taskService;
+    protected $taskRepository;
+
+    public function __construct(TaskService $taskService, TaskRepository $taskRepository)
+    {
+        $this->taskService = $taskService;
+        $this->taskRepository = $taskRepository;
+    }
 
     /**
      * Dashboard tiến độ tổng quan
@@ -21,7 +32,7 @@ class DailyTaskProgressController extends Controller
     public function index(Content $content)
     {
         $today = Carbon::today();
-        $data = $this->getTodayProgressData($today);
+        $data = $this->taskService->getDailyOverviewStats($today);
         
         return $content
             ->header('Tiến độ hoàn thành công việc')
@@ -32,94 +43,45 @@ class DailyTaskProgressController extends Controller
     /**
      * Chi tiết tiến độ theo ngày
      */
-    public function daily(Request $request)
+    public function daily(Request $request, Content $content)
     {
         $targetDate = $request->get('date') ? Carbon::parse($request->get('date')) : Carbon::today();
         $user = Admin::user();
-        $userRoles = $user->roles->pluck('slug')->toArray();
         
-        // Lấy tasks của user cho ngày đã chọn (bao gồm cả recurring và one-time)
-        $userTasks = DailyTask::with(['completions' => function($query) use ($user, $targetDate) {
-            return $query->where('user_id', $user->id)->where('completion_date', $targetDate);
-        }, 'category'])
-        ->where('is_active', 1)
-        ->orderBy('priority', 'desc')
-        ->orderBy('suggested_time')
-        ->get()
-        ->filter(function($task) use ($user, $userRoles, $targetDate) {
-            // Sử dụng method mới cho ngày cụ thể - hỗ trợ cả recurring và one-time
-            return $task->isActiveOnDate($targetDate) && $task->isAssignedToUser($user->id, $userRoles);
-        });
+        // Lấy data từ TaskService
+        $data = $this->taskService->getDailyTasksData($user, $targetDate);
         
-        $totalTasks = $userTasks->count();
-        $completedTasks = $userTasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-        })->count();
-        $skippedTasks = $userTasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'skipped';
-        })->count();
-        $failedTasks = $userTasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'failed';
-        })->count();
-        $pendingTasks = $totalTasks - $completedTasks - $skippedTasks - $failedTasks;
-        
-        $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
-        
-        // Group by category và task type
-        $tasksByCategory = $userTasks->groupBy(function($task) {
-            $categoryName = $task->category ? $task->category->name : 'Không phân loại';
-            $taskTypeLabel = $task->task_type === 'one_time' ? ' (Một lần)' : '';
-            return $categoryName . $taskTypeLabel;
-        });
-        
-        // Priority stats
-        $priorityStats = [];
-        foreach (['urgent', 'high', 'medium', 'low'] as $priority) {
-            $priorityTasks = $userTasks->where('priority', $priority);
-            $priorityCompleted = $priorityTasks->filter(function($task) {
-                return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-            })->count();
-            
-            $priorityStats[$priority] = [
-                'total' => $priorityTasks->count(),
-                'completed' => $priorityCompleted,
-                'rate' => $priorityTasks->count() > 0 ? round(($priorityCompleted / $priorityTasks->count()) * 100) : 0
-            ];
-        }
-        
-        // Task type stats
-        $recurringTasks = $userTasks->where('task_type', 'recurring')->count();
-        $oneTimeTasks = $userTasks->where('task_type', 'one_time')->count();
-        $overdueTasks = $userTasks->filter(function($task) {
-            return $task->isOverdue();
-        })->count();
-        
-        return view('admin.daily-task-progress.daily', [
-            'targetDate' => $targetDate,
-            'userTasks' => $userTasks,
-            'tasksByCategory' => $tasksByCategory,
-            'totalTasks' => $totalTasks,
-            'completedTasks' => $completedTasks,
-            'skippedTasks' => $skippedTasks,
-            'failedTasks' => $failedTasks,
-            'pendingTasks' => $pendingTasks,
-            'completionRate' => $completionRate,
-            'priorityStats' => $priorityStats,
-            'recurringTasks' => $recurringTasks,
-            'oneTimeTasks' => $oneTimeTasks,
-            'overdueTasks' => $overdueTasks
-        ]);
+        return $content
+            ->header('Tiến độ công việc cá nhân')
+            ->description('Theo dõi công việc ngày ' . $targetDate->format('d/m/Y'))
+            ->view('admin.daily-task-progress.daily', $data);
     }
 
     /**
-     * Chi tiết tiến độ của một nhân viên
+     * Báo cáo tiến độ theo tuần
      */
-    public function userDetail($userId, Content $content)
+    public function weekly(Request $request, Content $content)
+    {
+        $startWeek = $request->get('week') ? Carbon::parse($request->get('week')) : Carbon::now()->startOfWeek();
+        $endWeek = $startWeek->copy()->endOfWeek();
+        
+        $weeklyData = $this->buildWeeklyProgressData($startWeek, $endWeek);
+        
+        return $content
+            ->header('Báo cáo tiến độ theo tuần')
+            ->description('Thống kê tiến độ từ ' . $startWeek->format('d/m/Y') . ' đến ' . $endWeek->format('d/m/Y'))
+            ->view('admin.daily-task-progress.weekly', $weeklyData);
+    }
+
+    /**
+     * Chi tiết tiến độ của một user cụ thể
+     */
+    public function userDetail(Request $request, $userId, Content $content)
     {
         $user = Administrator::findOrFail($userId);
-        $date = request('date', Carbon::today()->format('Y-m-d'));
-        $targetDate = Carbon::parse($date);
-        $data = $this->getUserDetailData($user, $targetDate);
+        $targetDate = $request->get('date') ? Carbon::parse($request->get('date')) : Carbon::today();
+        
+        $data = $this->taskService->getUserDetailData($user, $targetDate);
         
         return $content
             ->header("Chi tiết tiến độ: {$user->name}")
@@ -128,202 +90,129 @@ class DailyTaskProgressController extends Controller
     }
 
     /**
-     * Lấy dữ liệu tiến độ hôm nay
+     * API endpoint để lấy stats nhanh cho AJAX
      */
-    protected function getTodayProgressData($today)
+    public function getQuickStats(Request $request)
     {
-        // Lấy tất cả users
-        $users = Administrator::where('is_active', 1)->with(['roles'])->orderBy('name')->get();
+        $date = $request->get('date', Carbon::today()->format('Y-m-d'));
+        $user = Admin::user();
         
-        $totalUsers = $users->count();
-        $totalCompletedUsers = 0;
-        $totalTasksAssigned = 0;
-        $totalTasksCompleted = 0;
-        $userProgressData = collect();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
         
-        foreach ($users as $user) {
-            $userRoles = $user->roles->pluck('slug')->toArray();
+        try {
+            $userTasks = $this->taskService->getUserTasksForDate($user, Carbon::parse($date));
+            $stats = $this->taskService->calculateCompletionStats($userTasks);
             
-            // Lấy tasks được assign cho user này
-            $userTasks = DailyTask::with(['completions' => function($query) use ($user, $today) {
-                $query->where('user_id', $user->id)->where('completion_date', $today);
-            }, 'category'])
-            ->where('is_active', 1)
-            ->get()
-            ->filter(function($task) use ($user, $userRoles) {
-                return $task->isActiveToday() && $task->isAssignedToUser($user->id, $userRoles);
-            });
-            
-            $userTaskCount = $userTasks->count();
-            $userCompletedCount = $userTasks->filter(function($task) {
-                return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-            })->count();
-            
-            $completionRate = $userTaskCount > 0 ? round(($userCompletedCount / $userTaskCount) * 100) : 0;
-            
-            // Thống kê urgent tasks
-            $urgentTasks = $userTasks->where('priority', 'urgent');
-            $urgentTotal = $urgentTasks->count();
-            $urgentCompleted = $urgentTasks->filter(function($task) {
-                return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-            })->count();
-            
-            // Last activity
-            $lastActivity = $this->getLastActivity($user->id, $today);
-            
-            $totalTasksAssigned += $userTaskCount;
-            $totalTasksCompleted += $userCompletedCount;
-            
-            // User hoàn thành 100%
-            if ($userTaskCount > 0 && $userCompletedCount == $userTaskCount) {
-                $totalCompletedUsers++;
-            }
-            
-            $userProgressData->push([
-                'user' => $user,
-                'total_tasks' => $userTaskCount,
-                'completed_tasks' => $userCompletedCount,
-                'pending_tasks' => $userTaskCount - $userCompletedCount,
-                'completion_rate' => $completionRate,
-                'urgent_total' => $urgentTotal,
-                'urgent_completed' => $urgentCompleted,
-                'last_activity' => $lastActivity,
-                'roles' => $user->roles->pluck('name')->implode(', ')
+            return response()->json([
+                'success' => true,
+                'data' => $stats
             ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Lấy danh sách tasks cần review
+     */
+    public function getTasksNeedingReview()
+    {
+        $tasksNeedingReview = $this->taskRepository->getTasksNeedingReview();
+        
+        return response()->json([
+            'success' => true,
+            'data' => $tasksNeedingReview->map(function($completion) {
+                return [
+                    'id' => $completion->id,
+                    'task_title' => $completion->dailyTask->title,
+                    'user_name' => $completion->user->name,
+                    'completion_date' => $completion->completion_date->format('d/m/Y'),
+                    'notes' => $completion->notes,
+                    'review_url' => admin_url("daily-tasks/toggle-review/{$completion->id}/0")
+                ];
+            })
+        ]);
+    }
+
+    /**
+     * Lấy overdue one-time tasks
+     */
+    public function getOverdueTasks()
+    {
+        $overdueTasks = $this->taskRepository->getOverdueOneTimeTasks();
+        
+        return response()->json([
+            'success' => true,
+            'data' => $overdueTasks->map(function($task) {
+                return [
+                    'id' => $task->id,
+                    'title' => $task->title,
+                    'category' => $task->category ? $task->category->name : 'N/A',
+                    'end_date' => $task->end_date->format('d/m/Y'),
+                    'days_overdue' => $task->end_date->diffInDays(Carbon::today()),
+                    'edit_url' => admin_url("daily-tasks/{$task->id}/edit")
+                ];
+            })
+        ]);
+    }
+
+    /**
+     * Xây dựng dữ liệu tiến độ theo tuần
+     */
+    private function buildWeeklyProgressData($startWeek, $endWeek)
+    {
+        $dailyStats = [];
+        $current = $startWeek->copy();
+        
+        while ($current->lte($endWeek)) {
+            $dailyStats[$current->format('Y-m-d')] = $this->taskService->getDailyOverviewStats($current);
+            $current->addDay();
         }
         
-        $overallCompletionRate = $totalTasksAssigned > 0 ? round(($totalTasksCompleted / $totalTasksAssigned) * 100) : 0;
-        $userCompletionRate = $totalUsers > 0 ? round(($totalCompletedUsers / $totalUsers) * 100) : 0;
-        
-        // Lấy recent completions
-        $recentCompletions = UserTaskCompletion::with(['user', 'dailyTask.category'])
-            ->whereDate('completion_date', $today)
-            ->orderBy('completed_at_time', 'desc')
-            ->take(10)
-            ->get();
+        // Tính toán summary stats
+        $totalUsers = Administrator::count();
+        $weeklyCompletions = collect($dailyStats)->sum('completed_count');
+        $weeklyTotalTasks = collect($dailyStats)->sum('total_completions');
+        $weeklyCompletionRate = $weeklyTotalTasks > 0 ? 
+            round(($weeklyCompletions / $weeklyTotalTasks) * 100) : 0;
         
         return [
-            'today' => $today,
-            'totalUsers' => $totalUsers,
-            'totalCompletedUsers' => $totalCompletedUsers,
-            'totalTasksAssigned' => $totalTasksAssigned,
-            'totalTasksCompleted' => $totalTasksCompleted,
-            'overallCompletionRate' => $overallCompletionRate,
-            'userCompletionRate' => $userCompletionRate,
-            'userProgressData' => $userProgressData->sortBy('completion_rate'),
-            'recentCompletions' => $recentCompletions
+            'start_week' => $startWeek,
+            'end_week' => $endWeek,
+            'daily_stats' => $dailyStats,
+            'total_users' => $totalUsers,
+            'weekly_completions' => $weeklyCompletions,
+            'weekly_total_tasks' => $weeklyTotalTasks,
+            'weekly_completion_rate' => $weeklyCompletionRate,
+            'completion_rate_by_category' => $this->buildWeeklyCompletionRateByCategory($startWeek, $endWeek)
         ];
     }
 
     /**
-     * Lấy dữ liệu tiến độ theo ngày
+     * Xây dựng completion rate theo category trong tuần
      */
-    protected function getDailyProgressData($targetDate)
+    private function buildWeeklyCompletionRateByCategory($startDate, $endDate)
     {
-        $completions = UserTaskCompletion::with(['user', 'dailyTask.category'])
-            ->whereDate('completion_date', $targetDate)
-            ->orderBy('completed_at_time', 'desc')
-            ->get();
-            
-        $users = $completions->pluck('user')->unique('id');
-        $totalCompletions = $completions->count();
-        $completedCount = $completions->where('status', 'completed')->count();
-        $skippedCount = $completions->where('status', 'skipped')->count();
-        $failedCount = $completions->where('status', 'failed')->count();
-        
-        return [
-            'targetDate' => $targetDate,
-            'completions' => $completions,
-            'users' => $users,
-            'totalCompletions' => $totalCompletions,
-            'completedCount' => $completedCount,
-            'skippedCount' => $skippedCount,
-            'failedCount' => $failedCount
-        ];
-    }
-
-    /**
-     * Lấy dữ liệu chi tiết user - cập nhật để hỗ trợ one-time tasks
-     */
-    protected function getUserDetailData($user, $targetDate)
-    {
-        $userRoles = $user->roles->pluck('slug')->toArray();
-        
-        // Lấy tất cả tasks được assign cho user trong ngày (bao gồm cả recurring và one-time)
-        $userTasks = DailyTask::with(['completions' => function($query) use ($user, $targetDate) {
-            $query->where('user_id', $user->id)->where('completion_date', $targetDate);
-        }, 'category'])
-        ->where('is_active', 1)
-        ->orderBy('priority', 'desc')
-        ->orderBy('suggested_time')
-        ->get()
-        ->filter(function($task) use ($user, $userRoles, $targetDate) {
-            // Sử dụng method mới để check cả recurring và one-time tasks
-            return $task->isActiveOnDate($targetDate) && $task->isAssignedToUser($user->id, $userRoles);
-        });
-        
-        $totalTasks = $userTasks->count();
-        $completedTasks = $userTasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-        })->count();
-        $skippedTasks = $userTasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'skipped';
-        })->count();
-        $failedTasks = $userTasks->filter(function($task) {
-            return $task->completions->isNotEmpty() && $task->completions->first()->status === 'failed';
-        })->count();
-        $pendingTasks = $totalTasks - $completedTasks - $skippedTasks - $failedTasks;
-        
-        $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
-        
-        // Group by category với phân biệt task type
-        $tasksByCategory = $userTasks->groupBy(function($task) {
-            $categoryName = $task->category ? $task->category->name : 'Không phân loại';
-            return $categoryName;
-        });
-        
-        // Priority stats
-        $priorityStats = [];
-        foreach (['urgent', 'high', 'medium', 'low'] as $priority) {
-            $priorityTasks = $userTasks->where('priority', $priority);
-            $priorityCompleted = $priorityTasks->filter(function($task) {
-                return $task->completions->isNotEmpty() && $task->completions->first()->status === 'completed';
-            })->count();
-            
-            $priorityStats[$priority] = [
-                'total' => $priorityTasks->count(),
-                'completed' => $priorityCompleted,
-                'rate' => $priorityTasks->count() > 0 ? round(($priorityCompleted / $priorityTasks->count()) * 100) : 0
-            ];
-        }
-        
-        return [
-            'userTasks' => $userTasks,
-            'tasksByCategory' => $tasksByCategory,
-            'totalTasks' => $totalTasks,
-            'completedTasks' => $completedTasks,
-            'skippedTasks' => $skippedTasks,
-            'failedTasks' => $failedTasks,
-            'pendingTasks' => $pendingTasks,
-            'completionRate' => $completionRate,
-            'priorityStats' => $priorityStats
-        ];
-    }
-
-    /**
-     * Lấy hoạt động cuối cùng của user
-     */
-    protected function getLastActivity($userId, $date)
-    {
-        $lastCompletion = UserTaskCompletion::where('user_id', $userId)
-            ->where('completion_date', $date)
-            ->orderBy('completed_at_time', 'desc')
-            ->first();
-            
-        if (!$lastCompletion || !$lastCompletion->completed_at_time) {
-            return null;
-        }
-        
-        return Carbon::parse($lastCompletion->completed_at_time)->format('H:i');
+        return $this->taskRepository->getCompletionRateByCategory($startDate)
+            ->merge($this->taskRepository->getCompletionRateByCategory($endDate))
+            ->groupBy('category_name')
+            ->map(function($group) {
+                $totalTasks = $group->sum('total_tasks');
+                $completedTasks = $group->sum('completed_tasks');
+                $rate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100, 2) : 0;
+                
+                return [
+                    'category_name' => $group->first()->category_name,
+                    'category_color' => $group->first()->category_color,
+                    'total_tasks' => $totalTasks,
+                    'completed_tasks' => $completedTasks,
+                    'completion_rate' => $rate
+                ];
+            });
     }
 }

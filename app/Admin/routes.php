@@ -90,6 +90,11 @@ Route::group([
         $router->get('/daily', [DailyTaskProgressController::class, 'daily'])->name('daily');
         $router->get('/weekly', [DailyTaskProgressController::class, 'weekly'])->name('weekly');
         $router->get('/{user}/detail', [DailyTaskProgressController::class, 'userDetail'])->name('user-detail');
+
+        // Progress controller endpoints
+        $router->get('/quick-stats', 'DailyTaskProgressController@getQuickStats');
+        $router->get('/tasks-needing-review', 'DailyTaskProgressController@getTasksNeedingReview');
+        $router->get('/overdue-tasks', 'DailyTaskProgressController@getOverdueTasks');
     });
     // AJAX Routes for task completion
     $router->post('daily-tasks/ajax/toggle-completion', 'DailyTaskAjaxController@toggleCompletion');
@@ -97,6 +102,15 @@ Route::group([
     $router->get('daily-tasks/ajax/stats', 'DailyTaskAjaxController@getStats');
     $router->get('daily-tasks/toggle-review/{completion}/{status}', 'DailyTaskController@toggleReview');
     $router->post('daily-tasks/update-completion-note/{completion}', 'DailyTaskController@updateCompletionNote');
+    // API endpoints mới cho AJAX
+    $router->get('daily-tasks/ajax/quick-stats', 'DailyTaskAjaxController@getQuickStats');
+    $router->get('daily-tasks/ajax/tasks', 'DailyTaskAjaxController@getTasks');
+    $router->post('daily-tasks/ajax/batch-update', 'DailyTaskAjaxController@batchUpdate');
+    $router->get('daily-tasks/ajax/completion-history', 'DailyTaskAjaxController@getCompletionHistory');
+    $router->post('daily-tasks/ajax/mark-all-completed', 'DailyTaskAjaxController@markAllCompleted');
+    $router->post('daily-tasks/ajax/reset-all-tasks', 'DailyTaskAjaxController@resetAllTasks');
+
+    
 
 
     ############# OrderController #############
