@@ -47,6 +47,19 @@
     .fc-event .fc-event-main{
         padding: 3px 5px 3px;
     }
+
+    /* Style cho thông tin nhân viên nghỉ phép hiển thị bên dưới event */
+    .leave-info-below {
+        color: #9f4d13 !important;
+        font-size: 11px !important;
+        font-weight: normal !important;
+        line-height: 1.2;
+        margin-top: 4px;
+        padding: 2px 5px;
+        background-color: rgba(108, 117, 125, 0.1);
+        border-radius: 3px;
+        display: block;
+    }
 </style>
 
 <!-- === HTML CHO WIDGET === -->
@@ -116,6 +129,7 @@
                     },
                     
                     eventDidMount: function(info) {
+                        // Thêm tooltip cho event
                         if (info.event.title) {
                             $(info.el).tooltip({
                                 title: info.event.title,
@@ -123,6 +137,33 @@
                                 trigger: 'hover',
                                 container: 'body'
                             });
+                        }
+
+                        // Thêm thông tin nhân viên nghỉ phép bên dưới event
+                        var event = info.event;
+                        var onLeaveUsers = event.extendedProps.on_leave_users || [];
+                        
+                        if (onLeaveUsers.length > 0) {
+                            // Tạo text hiển thị cho nhân viên nghỉ phép
+                            var leaveUsersText = onLeaveUsers.map(function(user) {
+                                return user.name + ' (nghỉ)';
+                            }).join(', ');
+                            
+                            // Tìm day cell chứa event này
+                            var dayCell = info.el.closest('.fc-daygrid-day-frame');
+                            if (dayCell) {
+                                // Kiểm tra xem đã có info nghỉ phép chưa
+                                var existingLeaveInfo = dayCell.querySelector('.leave-info-below');
+                                if (!existingLeaveInfo) {
+                                    // Tạo element hiển thị thông tin nghỉ phép
+                                    var leaveInfoEl = document.createElement('div');
+                                    leaveInfoEl.className = 'leave-info-below';
+                                    leaveInfoEl.textContent = leaveUsersText;
+                                    
+                                    // Thêm vào cuối day cell
+                                    dayCell.appendChild(leaveInfoEl);
+                                }
+                            }
                         }
                     },
                 });

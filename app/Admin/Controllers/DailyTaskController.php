@@ -259,13 +259,10 @@ class DailyTaskController extends Controller
             ->default('recurring')
             ->required();
 
+        // FIXED: Chỉ 1 field frequency duy nhất, không dùng when()
         $form->multipleSelect('frequency', 'Tần suất')
             ->options($this->getFrequencyOptions())
-            ->when('recurring', function (Form $form) {
-                $form->multipleSelect('frequency', 'Tần suất')
-                    ->options($this->getFrequencyOptions())
-                    ->required();
-            });
+            ->default(['daily']);
 
         $form->time('suggested_time', 'Giờ đề xuất');
         $form->number('estimated_minutes', 'Thời gian ước tính (phút)')->min(1);
@@ -284,6 +281,38 @@ class DailyTaskController extends Controller
         $form->number('sort_order', 'Thứ tự sắp xếp')->default(0);
 
         $form->hidden('created_by')->default(Admin::user()->id);
+
+        // FIXED: Thêm JavaScript để handle show/hide frequency field
+        Admin::script('
+            $(document).ready(function() {
+                function toggleFrequencyField() {
+                    var taskType = $(\'select[name="task_type"]\').val();
+                    var frequencyGroup = $(\'select[name="frequency[]"]\').closest(\'.form-group\');
+                    var frequencyLabel = frequencyGroup.find(\'label\');
+                    
+                    if (taskType === \'one_time\') {
+                        frequencyGroup.hide();
+                        // Set giá trị one_time cho hidden input
+                        $(\'select[name="frequency[]"]\').val([\'one_time\']).trigger(\'change\');
+                    } else {
+                        frequencyGroup.show();
+                        // Reset về daily nếu chưa có giá trị
+                        var currentVal = $(\'select[name="frequency[]"]\').val();
+                        if (!currentVal || currentVal.length === 0 || currentVal.includes(\'one_time\')) {
+                            $(\'select[name="frequency[]"]\').val([\'daily\']).trigger(\'change\');
+                        }
+                    }
+                }
+                
+                // Chạy lần đầu khi load
+                toggleFrequencyField();
+                
+                // Chạy khi thay đổi task_type
+                $(\'select[name="task_type"]\').on(\'change\', function() {
+                    toggleFrequencyField();
+                });
+            });
+        ');
 
         return $form;
     }
