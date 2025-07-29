@@ -93,7 +93,7 @@ class PosOrderController extends Controller
         // Tối ưu query với select specific columns và relationship
         $grid->model()->select([
             'id', 'order_id', 'customer_name', 'customer_phone', 
-            'cod', 'status', 'status_name', 'order_sources_name', 
+            'cod', 'status', 'sub_status', 'dataset_status', 'status_name', 'order_sources_name', 
             'total_quantity', 'created_at', 'pos_updated_at', 'inserted_at', 'order_link'
         ])->withStatusInfo();
 
@@ -123,6 +123,19 @@ class PosOrderController extends Controller
 
             // Filter theo trạng thái - có index
             $filter->equal('status', 'Trạng thái')->select(PosOrderStatus::getSelectOptions());
+            
+            // Filter theo dataset_status (Dataset)
+            $filter->where(function ($query) {
+                if ($this->input === 'not_null') {
+                    $query->whereNotNull('dataset_status');
+                } else {
+                    $query->where('dataset_status', $this->input);
+                }
+            }, 'Dataset')->select(array_merge(
+                ['not_null' => '--- Có Dataset ---'],
+                PosOrderStatus::getSelectOptions()
+            ));
+            
             $filter->between('cod', 'Giá trị COD')->integer();
             
             // Filter theo nguồn
@@ -218,6 +231,20 @@ class PosOrderController extends Controller
             })
             ->width(55);
 
+        // Cột Dataset - hiển thị thông tin dataset_status
+        $grid->column('dataset_status', 'Dataset')
+            ->display(function ($datasetStatus) {
+                if (!$datasetStatus || !$this->datasetStatusInfo) {
+                    return '';
+                }
+                
+                $color = $this->dataset_status_color ?? 'default';
+                $name = $this->dataset_status_name;
+                
+                return "<span class='label label-{$color}'>{$name}</span>";
+            })
+            ->width(120);
+
         $grid->column('inserted_at', 'Ngày tạo')
             ->display(function ($createdAt) {
                 return date('d/m/Y H:i', strtotime($createdAt));
@@ -287,7 +314,14 @@ class PosOrderController extends Controller
         $show->divider();
         
         $show->field('status', 'Trạng thái')->using(PosOrder::getStatusOptions());
-        $show->field('sub_status', 'Trạng thái phụ');
+        $show->field('dataset_status', 'Dataset')->as(function ($datasetStatus) {
+            if (!$datasetStatus) {
+                return 'Không có';
+            }
+            
+            $statusInfo = PosOrderStatus::where('status_code', $datasetStatus)->first();
+            return $statusInfo ? $statusInfo->status_name : 'Không xác định';
+        });
         $show->field('order_sources_name', 'Nguồn đơn hàng');
         
         $show->divider();
@@ -337,6 +371,7 @@ class PosOrderController extends Controller
         
         $form->select('status', 'Trạng thái')->options(PosOrder::getStatusOptions())->required();
         $form->number('sub_status', 'Trạng thái phụ');
+        $form->select('dataset_status', 'Dataset')->options(PosOrderStatus::getSelectOptions());
         $form->text('status_name', 'Tên trạng thái');
         
         $form->select('order_sources', 'Nguồn đơn hàng')->options([

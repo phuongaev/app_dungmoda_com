@@ -24,6 +24,7 @@ class PosOrder extends Model
         'items_length',
         'status',
         'sub_status',
+        'dataset_status',
         'status_name',
         'order_sources',
         'order_sources_name',
@@ -42,6 +43,23 @@ class PosOrder extends Model
         'pos_updated_at' => 'datetime',
         'inserted_at' => 'datetime',
     ];
+
+    // Constants cho các trạng thái
+    const STATUS_PENDING = 0;
+    const STATUS_WAITING_GOODS = 7;
+    const STATUS_ORDERED = 8;
+    const STATUS_CONFIRMED = 9;
+    const STATUS_WAITING_PRINT = 10;
+    const STATUS_PRINTED = 11;
+    const STATUS_PACKING = 12;
+    const STATUS_WAITING_TRANSFER = 1;
+    const STATUS_SHIPPED = 2;
+    const STATUS_RECEIVED = 3;
+    const STATUS_RECEIVED_MONEY = 16;
+    const STATUS_RETURNING = 4;
+    const STATUS_PARTIAL_RETURN = 15;
+    const STATUS_RETURNED = 5;
+    const STATUS_CANCELED = 6;
 
     // Scope cho tìm kiếm tối ưu
     public function scopeSearchByPhone($query, $phone)
@@ -91,58 +109,18 @@ class PosOrder extends Model
         return $phone;
     }
 
-    // Scope cho filter theo thời gian inserted_at
-    public function scopeByInsertedAtRange($query, $startDate, $endDate)
-    {
-        if ($startDate && $endDate) {
-            return $query->whereBetween('inserted_at', [$startDate, $endDate]);
-        }
-        return $query;
-    }
-    
-    // Scope cho filter theo thời gian trong ngày hôm nay
-    public function scopeToday($query)
-    {
-        return $query->whereDate('inserted_at', today());
-    }
-
-    // Scope cho filter theo thời gian trong tuần này
-    public function scopeThisWeek($query)
-    {
-        return $query->whereBetween('inserted_at', [
-            now()->startOfWeek(),
-            now()->endOfWeek()
-        ]);
-    }
-
-    // Status constants theo yêu cầu
-    const STATUS_NEW = 0;
-    const STATUS_WAITING_GOODS = 11;
-    const STATUS_ORDERED = 20;
-    const STATUS_CONFIRMED = 1;
-    const STATUS_WAITING_PRINT = 12;
-    const STATUS_PRINTED = 13;
-    const STATUS_PACKING = 8;
-    const STATUS_WAITING_TRANSFER = 9;
-    const STATUS_SHIPPED = 2;
-    const STATUS_RECEIVED = 3;
-    const STATUS_RECEIVED_MONEY = 16;
-    const STATUS_RETURNING = 4;
-    const STATUS_PARTIAL_RETURN = 15;
-    const STATUS_RETURNED = 5;
-    const STATUS_CANCELED = 6;
-
+    // Static methods cho options
     public static function getStatusOptions()
     {
         return [
-            self::STATUS_NEW => 'Mới',
+            self::STATUS_PENDING => 'Chờ xử lý',
             self::STATUS_WAITING_GOODS => 'Chờ hàng',
             self::STATUS_ORDERED => 'Đã đặt hàng',
             self::STATUS_CONFIRMED => 'Đã xác nhận',
             self::STATUS_WAITING_PRINT => 'Chờ in',
             self::STATUS_PRINTED => 'Đã in',
-            self::STATUS_PACKING => 'Đang đóng hàng',
-            self::STATUS_WAITING_TRANSFER => 'Chờ chuyển hàng',
+            self::STATUS_PACKING => 'Đang đóng gói',
+            self::STATUS_WAITING_TRANSFER => 'Chờ chuyển',
             self::STATUS_SHIPPED => 'Đã gửi hàng',
             self::STATUS_RECEIVED => 'Đã nhận',
             self::STATUS_RECEIVED_MONEY => 'Đã thu tiền',
@@ -153,11 +131,10 @@ class PosOrder extends Model
         ];
     }
 
-    // Phương thức lấy màu sắc cho status
     public static function getStatusColors()
     {
         return [
-            self::STATUS_NEW => 'default',
+            self::STATUS_PENDING => 'default',
             self::STATUS_WAITING_GOODS => 'warning',
             self::STATUS_ORDERED => 'info',
             self::STATUS_CONFIRMED => 'primary',
@@ -175,10 +152,16 @@ class PosOrder extends Model
         ];
     }
 
-    // Relationship với PosOrderStatus
+    // Relationship với PosOrderStatus cho cột status
     public function statusInfo()
     {
         return $this->belongsTo(PosOrderStatus::class, 'status', 'status_code');
+    }
+
+    // Relationship với PosOrderStatus cho cột dataset_status
+    public function datasetStatusInfo()
+    {
+        return $this->belongsTo(PosOrderStatus::class, 'dataset_status', 'status_code');
     }
 
     // Override getStatusNameAttribute để lấy từ bảng statuses
@@ -202,9 +185,27 @@ class PosOrder extends Model
         return self::getStatusColors()[$this->status] ?? 'default';
     }
 
+    // Accessor để lấy tên dataset_status từ relationship
+    public function getDatasetStatusNameAttribute()
+    {
+        if ($this->relationLoaded('datasetStatusInfo') && $this->datasetStatusInfo) {
+            return $this->datasetStatusInfo->status_name;
+        }
+        return null;
+    }
+
+    // Accessor để lấy màu dataset_status từ relationship
+    public function getDatasetStatusColorAttribute()
+    {
+        if ($this->relationLoaded('datasetStatusInfo') && $this->datasetStatusInfo) {
+            return $this->datasetStatusInfo->status_color;
+        }
+        return 'default';
+    }
+
     // Scope sử dụng relationship
     public function scopeWithStatusInfo($query)
     {
-        return $query->with('statusInfo');
+        return $query->with(['statusInfo', 'datasetStatusInfo']);
     }
 }
