@@ -171,4 +171,27 @@ Route::group([
     $router->get('employee-shift-swaps/get-user-shifts', 'EmployeeShiftSwapController@getUserShifts')->name('employee-shift-swaps.get-user-shifts');
 
 
+    // ############# WORKFLOW MANAGEMENT #############
+    $router->resource('workflows', 'WorkflowController');
+    
+    // Additional workflow routes
+    $router->get('workflows/{id}/statistics', 'WorkflowController@statistics')->name('workflows.statistics');
+    $router->post('workflows/bulk-update-status', 'WorkflowController@bulkUpdateStatus')->name('workflows.bulk-update-status');
+
+
+    // ===== Workflow History Management =====
+    $router->resource('workflow-histories', 'WorkflowHistoryController', [
+        'except' => ['create', 'store'] // Chỉ cho phép xem và xóa, không tạo mới từ admin
+    ]);
+    // Additional workflow history routes
+    $router->get('workflow-histories/by-order/{orderId}', 'WorkflowHistoryController@byOrder')->name('workflow-histories.by-order');
+    $router->get('workflow-histories/by-workflow/{workflowId}', 'WorkflowHistoryController@byWorkflow')->name('workflow-histories.by-workflow');
+    $router->get('workflow-histories/statistics', 'WorkflowHistoryController@statistics')->name('workflow-histories.statistics');
+    $router->delete('workflow-histories/bulk-delete', 'WorkflowHistoryController@bulkDelete')->name('workflow-histories.bulk-delete');
+    // ===== Workflow API Dashboard =====
+    $router->get('workflow-dashboard', 'WorkflowDashboardController@index')->name('workflow-dashboard');
+    $router->get('workflow-dashboard/analytics', 'WorkflowDashboardController@analytics')->name('workflow-dashboard.analytics');
+
+
+
 });

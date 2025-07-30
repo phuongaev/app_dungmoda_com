@@ -124,17 +124,13 @@ class PosOrderController extends Controller
             // Filter theo trạng thái - có index
             $filter->equal('status', 'Trạng thái')->select(PosOrderStatus::getSelectOptions());
             
-            // Filter theo dataset_status (Dataset)
-            $filter->where(function ($query) {
-                if ($this->input === 'not_null') {
-                    $query->whereNotNull('dataset_status');
-                } else {
-                    $query->where('dataset_status', $this->input);
-                }
-            }, 'Dataset')->select(array_merge(
-                ['not_null' => '--- Có Dataset ---'],
-                PosOrderStatus::getSelectOptions()
-            ));
+            // Filter theo dataset_status (Dataset) - giá trị cụ thể
+            $filter->equal('dataset_status', 'Dataset')->select(PosOrderStatus::getSelectOptions());
+            
+            // Filter có Dataset - scope filter
+            $filter->scope('has_dataset', 'Có Dataset')->where(function ($query) {
+                $query->whereNotNull('dataset_status');
+            });
             
             $filter->between('cod', 'Giá trị COD')->integer();
             
@@ -283,15 +279,19 @@ class PosOrderController extends Controller
     }
 
     /**
-     * Make a show builder.
+     * Make a show builder with workflow history.
      *
      * @param mixed $id
      * @return Show
      */
     protected function detail($id)
     {
-        $show = new Show(PosOrder::findOrFail($id));
+        $order = PosOrder::with('workflowHistories.workflow', 'workflowHistories.workflowStatus')
+                         ->findOrFail($id);
 
+        $show = new Show($order);
+
+        // Thông tin đơn hàng cơ bản
         $show->field('order_id', 'Mã đơn hàng');
         $show->field('system_id', 'System ID');
         $show->field('page_id', 'Page ID');
@@ -314,14 +314,7 @@ class PosOrderController extends Controller
         $show->divider();
         
         $show->field('status', 'Trạng thái')->using(PosOrder::getStatusOptions());
-        $show->field('dataset_status', 'Dataset')->as(function ($datasetStatus) {
-            if (!$datasetStatus) {
-                return 'Không có';
-            }
-            
-            $statusInfo = PosOrderStatus::where('status_code', $datasetStatus)->first();
-            return $statusInfo ? $statusInfo->status_name : 'Không xác định';
-        });
+        $show->field('sub_status', 'Trạng thái phụ');
         $show->field('order_sources_name', 'Nguồn đơn hàng');
         
         $show->divider();
@@ -337,6 +330,14 @@ class PosOrderController extends Controller
         $show->field('pos_updated_at', 'Cập nhật từ POS');
         $show->field('created_at', 'Ngày tạo');
         $show->field('updated_at', 'Ngày cập nhật');
+
+        // ================ WORKFLOW HISTORY SECTION ================
+        $show->divider();
+        
+        // Fix: Gọi method từ model instance
+        $show->field('workflow_histories', 'Lịch sử Workflow')->as(function () {
+            return $this->renderWorkflowHistoryTable();
+        })->escape(false);
 
         return $show;
     }

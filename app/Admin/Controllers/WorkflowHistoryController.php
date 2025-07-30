@@ -12,7 +12,6 @@ use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
 use Encore\Admin\Widgets\Box;
-use Encore\Admin\Widgets\InfoBox;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -76,7 +75,7 @@ class WorkflowHistoryController extends Controller
     }
 
     /**
-     * Make a grid builder.
+     * Make a grid builder - Fixed encoding issues
      */
     protected function grid()
     {
@@ -84,61 +83,109 @@ class WorkflowHistoryController extends Controller
 
         $grid->model()->orderBy('executed_at', 'desc');
         
-        // Eager load relationships
-        $grid->model()->with(['posOrder', 'workflowStatus']);
+        // Eager load relationships with proper encoding - Added workflow relationship
+        $grid->model()->with(['posOrder', 'workflow']);
 
-        $grid->column('id', 'ID')->sortable();
+        $grid->column('id', 'ID')->sortable()->width(100);
         
+        // Fixed customer name encoding issue
         $grid->column('posOrder.order_id', 'Mã đơn hàng')
             ->display(function ($orderId) {
-                return "<a href='/admin/pos-orders/{$this->pos_order_id}' target='_blank'>{$orderId}</a>";
+                if (!$orderId) return '<span class="text-muted">N/A</span>';
+                $safeOrderId = htmlspecialchars($orderId, ENT_QUOTES, 'UTF-8');
+                return "<a href='/admin/pos-orders/{$this->pos_order_id}' target='_blank'>{$safeOrderId}</a>";
             })
             ->width(120);
 
+        // Fixed customer name with proper encoding
         $grid->column('posOrder.customer_name', 'Khách hàng')
             ->display(function ($customerName) {
-                return strlen($customerName) > 20 ? substr($customerName, 0, 20) . '...' : $customerName;
+                if (!$customerName) return '<span class="text-muted">N/A</span>';
+                
+                // Ensure proper UTF-8 encoding
+                $safeName = mb_convert_encoding($customerName, 'UTF-8', 'UTF-8');
+                $safeName = htmlspecialchars($safeName, ENT_QUOTES, 'UTF-8');
+                
+                // Truncate if too long
+                if (mb_strlen($safeName, 'UTF-8') > 20) {
+                    $safeName = mb_substr($safeName, 0, 20, 'UTF-8') . '...';
+                }
+                
+                return $safeName;
             })
             ->width(140);
 
-        $grid->column('workflowStatus.status_name', 'Workflow Status')
-            ->display(function ($statusName) {
-                return "<span class='label label-primary'>{$statusName}</span>";
+        $grid->column('workflow_status_id', 'Workflow Status ID')
+            ->display(function ($statusId) {
+                if (!$statusId) return '<span class="text-muted">N/A</span>';
+                return "<span class='label label-primary'>{$statusId}</span>";
             })
-            ->width(150);
+            ->width(120);
 
         $grid->column('workflow_id', 'Workflow ID')
             ->display(function ($workflowId) {
-                return $workflowId ? "<span class='label label-info'>{$workflowId}</span>" : '<span class="text-muted">N/A</span>';
+                if (!$workflowId) return '<span class="text-muted">N/A</span>';
+                $safeWorkflowId = htmlspecialchars($workflowId, ENT_QUOTES, 'UTF-8');
+                return "<span class='label label-info'>{$safeWorkflowId}</span>";
             })
-            ->width(100);
+            ->width(120);
+
+        // NEW: Thêm cột Workflow Name
+        $grid->column('workflow.workflow_name', 'Workflow Name')
+            ->display(function ($workflowName) {
+                if (!$workflowName) {
+                    // Fallback: nếu không có workflow name, hiển thị workflow_id
+                    $workflowId = $this->workflow_id ?? 'N/A';
+                    return "<span class='text-muted'>{$workflowId}</span>";
+                }
+                
+                // Ensure proper UTF-8 encoding
+                $safeName = mb_convert_encoding($workflowName, 'UTF-8', 'UTF-8');
+                $safeName = htmlspecialchars($safeName, ENT_QUOTES, 'UTF-8');
+                
+                // Truncate if too long
+                if (mb_strlen($safeName, 'UTF-8') > 50) {
+                    $safeName = mb_substr($safeName, 0, 50, 'UTF-8') . '...';
+                }
+                
+                return "<span class='text-primary'>{$safeName}</span>";
+            })
+            ->width(280);
 
         $grid->column('executed_at', 'Thời gian chạy')
             ->display(function ($executedAt) {
-                return Carbon::parse($executedAt)->format('d/m/Y H:i:s');
+                if (!$executedAt) return '<span class="text-muted">N/A</span>';
+                try {
+                    return Carbon::parse($executedAt)->format('d/m/Y H:i:s');
+                } catch (\Exception $e) {
+                    return '<span class="text-muted">Invalid date</span>';
+                }
             })
             ->sortable()
-            ->width(140);
+            ->width(170);
 
         $grid->column('created_at', 'Ngày tạo')
             ->display(function ($createdAt) {
-                return Carbon::parse($createdAt)->format('d/m/Y H:i');
+                if (!$createdAt) return '<span class="text-muted">N/A</span>';
+                try {
+                    return Carbon::parse($createdAt)->format('d/m/Y H:i');
+                } catch (\Exception $e) {
+                    return '<span class="text-muted">Invalid date</span>';
+                }
             })
             ->sortable()
-            ->width(120);
+            ->width(170);
             
-        // Filters
+        // Filters with proper encoding
         $grid->filter(function($filter) {
             $filter->disableIdFilter();
             
             $filter->like('posOrder.order_id', 'Mã đơn hàng');
             $filter->like('posOrder.customer_name', 'Tên khách hàng');
-            
             $filter->equal('workflow_id', 'Workflow ID');
-            $filter->equal('workflow_status_id', 'Workflow Status')->select(
-                BaseStatus::pluck('status_name', 'status_id')->toArray()
-            );
-            
+            // NEW: Thêm filter theo Workflow Name
+            $filter->like('workflow.workflow_name', 'Workflow Name');
+            $filter->equal('workflow_status_id', 'Workflow Status ID');
             $filter->between('executed_at', 'Thời gian chạy')->datetime();
             
             $filter->scope('today', 'Hôm nay')->where(function ($query) {
@@ -157,7 +204,7 @@ class WorkflowHistoryController extends Controller
         // Actions
         $grid->actions(function ($actions) {
             $actions->disableEdit();
-            $actions->disableView();
+            // $actions->disableView();
         });
 
         // Bulk actions
@@ -165,15 +212,22 @@ class WorkflowHistoryController extends Controller
             $batch->disableDelete();
         });
 
-        $grid->paginate(50);
+        // Grid settings - Fixed footer issues
+        $grid->paginate(20);
         $grid->disableCreateButton();
         $grid->disableExport();
+        
+        // Fix grid footer encoding
+        $grid->footer(function ($query) {
+            $total = $query->count();
+            return "<div class='text-center'><small>Tổng cộng: <strong>{$total}</strong> bản ghi</small></div>";
+        });
 
         return $grid;
     }
 
     /**
-     * Grid for specific order
+     * Grid for specific order - Fixed encoding
      */
     protected function gridByOrder($order)
     {
@@ -181,23 +235,49 @@ class WorkflowHistoryController extends Controller
         
         $grid->model()->where('pos_order_id', $order->id)
             ->orderBy('executed_at', 'desc')
-            ->with('workflowStatus');
+            ->with(['workflow']); // Added workflow relationship
 
         $grid->column('id', 'ID');
         
-        $grid->column('workflowStatus.status_name', 'Workflow Status')
-            ->display(function ($statusName) {
-                return "<span class='label label-primary'>{$statusName}</span>";
+        $grid->column('workflow_status_id', 'Workflow Status ID')
+            ->display(function ($statusId) {
+                if (!$statusId) return '<span class="text-muted">N/A</span>';
+                return "<span class='label label-primary'>{$statusId}</span>";
             });
 
         $grid->column('workflow_id', 'Workflow ID')
             ->display(function ($workflowId) {
-                return $workflowId ? "<span class='label label-info'>{$workflowId}</span>" : '<span class="text-muted">N/A</span>';
+                if (!$workflowId) return '<span class="text-muted">N/A</span>';
+                $safeWorkflowId = htmlspecialchars($workflowId, ENT_QUOTES, 'UTF-8');
+                return "<span class='label label-info'>{$safeWorkflowId}</span>";
+            });
+
+        // NEW: Thêm Workflow Name cho grid by order
+        $grid->column('workflow.workflow_name', 'Workflow Name')
+            ->display(function ($workflowName) {
+                if (!$workflowName) {
+                    $workflowId = $this->workflow_id ?? 'N/A';
+                    return "<span class='text-muted'>{$workflowId}</span>";
+                }
+                
+                $safeName = mb_convert_encoding($workflowName, 'UTF-8', 'UTF-8');
+                $safeName = htmlspecialchars($safeName, ENT_QUOTES, 'UTF-8');
+                
+                if (mb_strlen($safeName, 'UTF-8') > 30) {
+                    $safeName = mb_substr($safeName, 0, 30, 'UTF-8') . '...';
+                }
+                
+                return "<span class='text-primary'>{$safeName}</span>";
             });
 
         $grid->column('executed_at', 'Thời gian chạy')
             ->display(function ($executedAt) {
-                return Carbon::parse($executedAt)->format('d/m/Y H:i:s');
+                if (!$executedAt) return '<span class="text-muted">N/A</span>';
+                try {
+                    return Carbon::parse($executedAt)->format('d/m/Y H:i:s');
+                } catch (\Exception $e) {
+                    return '<span class="text-muted">Invalid date</span>';
+                }
             })
             ->sortable();
 
@@ -210,132 +290,185 @@ class WorkflowHistoryController extends Controller
     }
 
     /**
-     * Make a show builder.
+     * Make a show builder - Fixed encoding
      */
     protected function detail($id)
     {
-        $show = new Show(PosOrderWorkflowHistory::findOrFail($id));
+        $show = new Show(PosOrderWorkflowHistory::with(['posOrder', 'workflow'])->findOrFail($id));
 
         $show->field('id', 'ID');
         
         $show->divider();
         
         $show->field('posOrder.order_id', 'Mã đơn hàng');
-        $show->field('posOrder.customer_name', 'Tên khách hàng');
+        $show->field('posOrder.customer_name', 'Tên khách hàng')->as(function ($name) {
+            return $name ? mb_convert_encoding($name, 'UTF-8', 'UTF-8') : 'N/A';
+        });
         $show->field('posOrder.customer_phone', 'Số điện thoại');
         
         $show->divider();
         
-        $show->field('workflowStatus.status_name', 'Workflow Status');
         $show->field('workflow_status_id', 'Workflow Status ID');
         $show->field('workflow_id', 'Workflow ID');
+        // NEW: Thêm Workflow Name vào detail view
+        $show->field('workflow.workflow_name', 'Workflow Name')->as(function ($name) {
+            return $name ? mb_convert_encoding($name, 'UTF-8', 'UTF-8') : 'N/A';
+        });
         
         $show->divider();
         
         $show->field('executed_at', 'Thời gian chạy');
         $show->field('created_at', 'Ngày tạo');
-        $show->field('updated_at', 'Ngày cập nhật');
 
         return $show;
     }
 
     /**
-     * Statistics boxes
+     * Statistics boxes - Fixed encoding issues
      */
     protected function statisticsBoxes()
     {
-        $today = Carbon::today();
-        $last7Days = Carbon::now()->subDays(7);
-        $last30Days = Carbon::now()->subDays(30);
+        try {
+            $today = Carbon::today();
+            $last7Days = Carbon::now()->subDays(7);
+            $last30Days = Carbon::now()->subDays(30);
 
-        // Thống kê hôm nay
-        $todayCount = PosOrderWorkflowHistory::whereDate('executed_at', $today)->count();
-        
-        // Thống kê 7 ngày qua
-        $last7DaysCount = PosOrderWorkflowHistory::where('executed_at', '>=', $last7Days)->count();
-        
-        // Thống kê 30 ngày qua
-        $last30DaysCount = PosOrderWorkflowHistory::where('executed_at', '>=', $last30Days)->count();
-        
-        // Tổng số lịch sử
-        $totalCount = PosOrderWorkflowHistory::count();
+            // Safe statistics calculation
+            $todayCount = PosOrderWorkflowHistory::whereDate('executed_at', $today)->count();
+            $last7DaysCount = PosOrderWorkflowHistory::where('executed_at', '>=', $last7Days)->count();
+            $last30DaysCount = PosOrderWorkflowHistory::where('executed_at', '>=', $last30Days)->count();
+            $totalCount = PosOrderWorkflowHistory::count();
 
-        return [
-            new InfoBox('Hôm nay', 'calendar', 'aqua', $todayCount, '/admin/workflow-histories?scope=today'),
-            new InfoBox('7 ngày qua', 'clock-o', 'green', $last7DaysCount, '/admin/workflow-histories?scope=last_7_days'),
-            new InfoBox('30 ngày qua', 'calendar-check-o', 'yellow', $last30DaysCount, '/admin/workflow-histories?scope=last_30_days'),
-            new InfoBox('Tổng cộng', 'database', 'red', $totalCount, '/admin/workflow-histories')
-        ];
+            $statsHtml = "
+            <div class='row'>
+                <div class='col-md-3'>
+                    <div class='info-box'>
+                        <span class='info-box-icon bg-aqua'><i class='fa fa-calendar'></i></span>
+                        <div class='info-box-content'>
+                            <span class='info-box-text'>Hôm nay</span>
+                            <span class='info-box-number'>" . number_format($todayCount) . "</span>
+                        </div>
+                    </div>
+                </div>
+                <div class='col-md-3'>
+                    <div class='info-box'>
+                        <span class='info-box-icon bg-green'><i class='fa fa-clock-o'></i></span>
+                        <div class='info-box-content'>
+                            <span class='info-box-text'>7 ngày qua</span>
+                            <span class='info-box-number'>" . number_format($last7DaysCount) . "</span>
+                        </div>
+                    </div>
+                </div>
+                <div class='col-md-3'>
+                    <div class='info-box'>
+                        <span class='info-box-icon bg-yellow'><i class='fa fa-calendar-check-o'></i></span>
+                        <div class='info-box-content'>
+                            <span class='info-box-text'>30 ngày qua</span>
+                            <span class='info-box-number'>" . number_format($last30DaysCount) . "</span>
+                        </div>
+                    </div>
+                </div>
+                <div class='col-md-3'>
+                    <div class='info-box'>
+                        <span class='info-box-icon bg-red'><i class='fa fa-database'></i></span>
+                        <div class='info-box-content'>
+                            <span class='info-box-text'>Tổng cộng</span>
+                            <span class='info-box-number'>" . number_format($totalCount) . "</span>
+                        </div>
+                    </div>
+                </div>
+            </div>";
+
+            return new Box('Thống kê tổng quan', $statsHtml);
+
+        } catch (\Exception $e) {
+            return new Box('Thống kê tổng quan', '<div class="alert alert-warning">Không thể tải thống kê</div>');
+        }
     }
 
     /**
-     * Detailed statistics
+     * Detailed statistics - Fixed encoding
      */
     protected function detailedStatistics()
     {
-        $last30Days = Carbon::now()->subDays(30);
+        try {
+            $last30Days = Carbon::now()->subDays(30);
 
-        // Top 10 workflow được chạy nhiều nhất trong 30 ngày
-        $topWorkflows = PosOrderWorkflowHistory::where('executed_at', '>=', $last30Days)
-            ->whereNotNull('workflow_id')
-            ->selectRaw('workflow_id, COUNT(*) as count')
-            ->groupBy('workflow_id')
-            ->orderBy('count', 'desc')
-            ->limit(10)
-            ->get();
+            // Top 10 workflow (safe query)
+            $topWorkflows = PosOrderWorkflowHistory::where('executed_at', '>=', $last30Days)
+                ->whereNotNull('workflow_id')
+                ->selectRaw('workflow_id, COUNT(*) as count')
+                ->groupBy('workflow_id')
+                ->orderBy('count', 'desc')
+                ->limit(10)
+                ->get();
 
-        // Top 10 workflow status trong 30 ngày
-        $topStatuses = PosOrderWorkflowHistory::where('executed_at', '>=', $last30Days)
-            ->join('base_statuses', 'pos_order_workflow_histories.workflow_status_id', '=', 'base_statuses.status_id')
-            ->selectRaw('base_statuses.status_name, COUNT(*) as count')
-            ->groupBy('base_statuses.status_id', 'base_statuses.status_name')
-            ->orderBy('count', 'desc')
-            ->limit(10)
-            ->get();
+            // Top 10 workflow status (safe query)
+            $topStatuses = PosOrderWorkflowHistory::where('executed_at', '>=', $last30Days)
+                ->selectRaw('workflow_status_id, COUNT(*) as count')
+                ->groupBy('workflow_status_id')
+                ->orderBy('count', 'desc')
+                ->limit(10)
+                ->get();
 
-        // Thống kê theo ngày trong 7 ngày qua
-        $dailyStats = PosOrderWorkflowHistory::where('executed_at', '>=', Carbon::now()->subDays(7))
-            ->selectRaw('DATE(executed_at) as date, COUNT(*) as count')
-            ->groupBy('date')
-            ->orderBy('date', 'desc')
-            ->get();
+            // Daily stats (safe query)
+            $dailyStats = PosOrderWorkflowHistory::where('executed_at', '>=', Carbon::now()->subDays(7))
+                ->selectRaw('DATE(executed_at) as date, COUNT(*) as count')
+                ->groupBy('date')
+                ->orderBy('date', 'desc')
+                ->get();
 
-        $content = '';
+            $content = '';
 
-        // Top Workflows
-        if ($topWorkflows->isNotEmpty()) {
-            $workflowHeaders = ['Workflow ID', 'Số lần chạy'];
-            $workflowRows = $topWorkflows->map(function($item) {
-                return [$item->workflow_id, $item->count];
-            })->toArray();
-            
-            $workflowTable = new \Encore\Admin\Widgets\Table($workflowHeaders, $workflowRows);
-            $content .= new Box('Top Workflows (30 ngày qua)', $workflowTable->render());
+            // Top Workflows table
+            if ($topWorkflows->isNotEmpty()) {
+                $workflowTable = '<table class="table table-striped">
+                    <thead><tr><th>Workflow ID</th><th>Số lần chạy</th></tr></thead>
+                    <tbody>';
+                
+                foreach ($topWorkflows as $item) {
+                    $safeWorkflowId = htmlspecialchars($item->workflow_id, ENT_QUOTES, 'UTF-8');
+                    $workflowTable .= "<tr><td>{$safeWorkflowId}</td><td>" . number_format($item->count) . "</td></tr>";
+                }
+                
+                $workflowTable .= '</tbody></table>';
+                $content .= new Box('Top Workflows (30 ngày qua)', $workflowTable);
+            }
+
+            // Top Statuses table
+            if ($topStatuses->isNotEmpty()) {
+                $statusTable = '<table class="table table-striped">
+                    <thead><tr><th>Workflow Status ID</th><th>Số lần chạy</th></tr></thead>
+                    <tbody>';
+                
+                foreach ($topStatuses as $item) {
+                    $statusTable .= "<tr><td>{$item->workflow_status_id}</td><td>" . number_format($item->count) . "</td></tr>";
+                }
+                
+                $statusTable .= '</tbody></table>';
+                $content .= new Box('Top Workflow Status (30 ngày qua)', $statusTable);
+            }
+
+            // Daily Stats table
+            if ($dailyStats->isNotEmpty()) {
+                $dailyTable = '<table class="table table-striped">
+                    <thead><tr><th>Ngày</th><th>Số lần chạy</th></tr></thead>
+                    <tbody>';
+                
+                foreach ($dailyStats as $item) {
+                    $date = Carbon::parse($item->date)->format('d/m/Y');
+                    $dailyTable .= "<tr><td>{$date}</td><td>" . number_format($item->count) . "</td></tr>";
+                }
+                
+                $dailyTable .= '</tbody></table>';
+                $content .= new Box('Thống kê theo ngày (7 ngày qua)', $dailyTable);
+            }
+
+            return $content;
+
+        } catch (\Exception $e) {
+            return new Box('Thống kê chi tiết', '<div class="alert alert-warning">Không thể tải thống kê chi tiết</div>');
         }
-
-        // Top Statuses
-        if ($topStatuses->isNotEmpty()) {
-            $statusHeaders = ['Workflow Status', 'Số lần chạy'];
-            $statusRows = $topStatuses->map(function($item) {
-                return [$item->status_name, $item->count];
-            })->toArray();
-            
-            $statusTable = new \Encore\Admin\Widgets\Table($statusHeaders, $statusRows);
-            $content .= new Box('Top Workflow Statuses (30 ngày qua)', $statusTable->render());
-        }
-
-        // Daily Stats
-        if ($dailyStats->isNotEmpty()) {
-            $dailyHeaders = ['Ngày', 'Số lần chạy'];
-            $dailyRows = $dailyStats->map(function($item) {
-                return [Carbon::parse($item->date)->format('d/m/Y'), $item->count];
-            })->toArray();
-            
-            $dailyTable = new \Encore\Admin\Widgets\Table($dailyHeaders, $dailyRows);
-            $content .= new Box('Thống kê theo ngày (7 ngày qua)', $dailyTable->render());
-        }
-
-        return $content;
     }
 
     /**
