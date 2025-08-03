@@ -120,6 +120,10 @@ Route::group([
     $router->post('pos-orders/import', 'PosOrderController@import')->name('pos-orders.import');
     $router->get('pos-orders/export', 'PosOrderController@export')->name('pos-orders.export');
     $router->post('pos-orders/bulk-update-status', 'PosOrderController@bulkUpdateStatus')->name('pos-orders.bulk-update-status');
+    // ===== POS Orders Cache Routes =====
+    $router->get('pos-orders/clear-cache', 'PosOrderController@clearCache')->name('pos-orders.clear-cache');
+    $router->get('pos-orders/quick-search-api', 'PosOrderController@quickSearchApi')->name('pos-orders.quick-search-api');
+    $router->get('pos-orders/stats-api', 'PosOrderController@getStats')->name('pos-orders.stats-api');
 
     // POS Order Statuses routes
     $router->resource('pos-order-statuses', 'PosOrderStatusController');

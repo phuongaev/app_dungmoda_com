@@ -90,26 +90,22 @@ class PosOrderController extends Controller
 
         $grid->model()->orderBy('inserted_at', 'desc');
 
+        if (request('quick_search')) {
+            $searchTerm = request('quick_search');
+            $grid->model()->where(function ($query) use ($searchTerm) {
+                $query->where('order_id', 'like', "%{$searchTerm}%")
+                      ->orWhere('customer_phone', 'like', "%{$searchTerm}%")
+                      ->orWhere('shipment_id', 'like', "%{$searchTerm}%")
+                      ->orWhere('customer_name', 'like', "%{$searchTerm}%");
+            });
+        }
+
         // Tối ưu query với select specific columns và relationship
         $grid->model()->select([
-            'id', 'order_id', 'customer_name', 'customer_phone', 
+            'id', 'order_id', 'shipment_id', 'customer_name', 'customer_phone', 
             'cod', 'status', 'sub_status', 'dataset_status', 'status_name', 'order_sources_name', 
             'total_quantity', 'created_at', 'pos_updated_at', 'inserted_at', 'order_link'
         ])->withStatusInfo();
-
-        // Header tools
-        // $grid->header(function ($query) {
-        //     $stats = DB::table('pos_orders')
-        //         ->selectRaw('
-        //             COUNT(*) as total,
-        //             SUM(CASE WHEN status = 16 THEN 1 ELSE 0 END) as completed,
-        //             SUM(CASE WHEN status = 6 THEN 1 ELSE 0 END) as cancelled,
-        //             SUM(cod) as total_cod
-        //         ')
-        //         ->first();
-
-        //     return new Box('Thống kê đơn hàng', view('admin.pos_orders.stats', compact('stats')));
-        // });
 
         // Filters - tối ưu với index
         $grid->filter(function ($filter) {
@@ -120,6 +116,10 @@ class PosOrderController extends Controller
                 $query->where('customer_phone', 'like', "%{$this->input}%")
                       ->orWhere('order_id', 'like', "%{$this->input}%");
             }, 'Tìm kiếm SĐT/Mã đơn hàng', 'search');
+
+            // $filter->like('order_id', 'Mã đơn hàng');
+            // $filter->like('customer_phone', 'Số điện thoại');
+            $filter->like('shipment_id', 'Mã vận đơn');
 
             // Filter theo trạng thái - có index
             $filter->equal('status', 'Trạng thái')->select(PosOrderStatus::getSelectOptions());
@@ -168,7 +168,7 @@ class PosOrderController extends Controller
         // Columns
         $grid->column('order_id', 'Mã đơn hàng')
             ->copyable()
-            ->width(170);
+            ->width(170)->filter('like');
 
         $grid->column('customer_name', 'Khách hàng')
             ->limit(20)
@@ -179,7 +179,7 @@ class PosOrderController extends Controller
                 return $this->formatted_phone ?? $phone;
             })
             ->copyable()
-            ->width(120);
+            ->width(120)->filter('like');
 
         $grid->column('cod', 'COD')
             ->display(function ($cod) {
@@ -198,6 +198,13 @@ class PosOrderController extends Controller
                 return "<span class='label label-{$color}'>{$statusName}</span>";
             })
             ->width(120);
+
+        $grid->column('shipment_id', 'Mã vận đơn')
+            ->display(function ($shipmentId) {
+                return $shipmentId ? $shipmentId : '<span class="text-muted">--</span>';
+            })
+            ->copyable()
+            ->width(150)->filter('like');
 
         $grid->column('order_sources_name', 'Nguồn')
             ->label([
@@ -261,11 +268,10 @@ class PosOrderController extends Controller
         });
 
         // Tools
-        // $grid->tools(function ($tools) {
-        //     $tools->append('<a href="' . route('admin.pos-orders.import') . '" class="btn btn-sm btn-success">
-        //         <i class="fa fa-upload"></i> Import đơn hàng
-        //     </a>');
-        // });
+        $grid->tools(function ($tools) {
+            // Thêm search box vào đầu tools
+            $tools->append(view('admin.pos_orders.search_box'));
+        });
 
         // Pagination
         $grid->paginate(20);

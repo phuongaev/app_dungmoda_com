@@ -24,8 +24,8 @@ class FanPageController extends Controller
     public function index(Content $content)
     {
         return $content
-            ->header(trans('admin.index'))
-            ->description(trans('admin.description'))
+            ->header('Quản lý Fan Pages')
+            ->description('Danh sách các trang fanpage')
             ->body($this->grid());
     }
 
@@ -39,8 +39,8 @@ class FanPageController extends Controller
     public function show($id, Content $content)
     {
         return $content
-            ->header(trans('admin.detail'))
-            ->description(trans('admin.description'))
+            ->header('Chi tiết Fan Page')
+            ->description('Thông tin chi tiết fanpage')
             ->body($this->detail($id));
     }
 
@@ -54,8 +54,8 @@ class FanPageController extends Controller
     public function edit($id, Content $content)
     {
         return $content
-            ->header(trans('admin.edit'))
-            ->description(trans('admin.description'))
+            ->header('Chỉnh sửa Fan Page')
+            ->description('Cập nhật thông tin fanpage')
             ->body($this->form()->edit($id));
     }
 
@@ -68,8 +68,8 @@ class FanPageController extends Controller
     public function create(Content $content)
     {
         return $content
-            ->header(trans('admin.create'))
-            ->description(trans('admin.description'))
+            ->header('Tạo Fan Page mới')
+            ->description('Thêm fanpage mới vào hệ thống')
             ->body($this->form());
     }
 
@@ -82,15 +82,65 @@ class FanPageController extends Controller
     {
         $grid = new Grid(new FanPage);
 
-        $grid->id('ID');
-        $grid->page_id('Id Fanpage');
-        $grid->page_name('Tên Fanpage');
-        $grid->page_short_name('Tên rút gọn');
-        $grid->dataset_id('Dataset Id');
-        $grid->column('dataset.dataset_name', 'Tên Dataset'); // Hiển thị tên thay cho ID
-        $grid->instagram_id('Instagram Id');
-        $grid->created_at(trans('admin.created_at'));
-        $grid->updated_at(trans('admin.updated_at'));
+        // Eager load dataset để hiển thị tên
+        $grid->model()->with(['dataset']);
+
+        $grid->page_id('ID Fanpage')->sortable();
+        $grid->page_name('Tên Fanpage')->sortable();
+        $grid->page_short_name('Tên rút gọn')->sortable();
+        
+        // Hiển thị tên dataset thay vì ID
+        $grid->column('dataset.dataset_name', 'Tên Dataset');
+        
+        $grid->instagram_id('Instagram ID');
+        
+        // Hiển thị pancake_token rút gọn với nút copy
+        $grid->pancake_token('Pancake Token')
+            ->display(function ($token) {
+                if (empty($token)) {
+                    return '<span class="text-muted">Chưa có token</span>';
+                }
+                
+                // Hiển thị 20 ký tự đầu + ... + 10 ký tự cuối
+                return strlen($token) > 30 
+                    ? substr($token, 0, 20) . '...' . substr($token, -10)
+                    : $token;
+            })
+            ->copyable()
+            ->width(250);
+
+        // Hiển thị botcake_token rút gọn với nút copy
+        $grid->botcake_token('Botcake Token')
+            ->display(function ($token) {
+                if (empty($token)) {
+                    return '<span class="text-muted">Chưa có token</span>';
+                }
+                
+                // Hiển thị 20 ký tự đầu + ... + 10 ký tự cuối
+                return strlen($token) > 30 
+                    ? substr($token, 0, 20) . '...' . substr($token, -10)
+                    : $token;
+            })
+            ->copyable()
+            ->width(250);
+
+        $grid->created_at('Ngày tạo')->display(function ($created_at) {
+            return date('d/m/Y H:i', strtotime($created_at));
+        })->sortable();
+
+        $grid->updated_at('Cập nhật cuối')->display(function ($updated_at) {
+            return date('d/m/Y H:i', strtotime($updated_at));
+        })->sortable();
+
+        // Thêm filter
+        $grid->filter(function($filter) {
+            $filter->like('page_name', 'Tên Fanpage');
+            $filter->like('page_short_name', 'Tên rút gọn');
+            $filter->equal('dataset_id', 'Dataset')->select(
+                Dataset::all()->pluck('dataset_name', 'dataset_id')
+            );
+            $filter->like('instagram_id', 'Instagram ID');
+        });
 
         return $grid;
     }
@@ -105,14 +155,20 @@ class FanPageController extends Controller
     {
         $show = new Show(FanPage::findOrFail($id));
 
-        $show->id('ID');
-        $show->page_id('page_id');
-        $show->page_name('page_name');
-        $show->page_short_name('page_short_name');
-        $show->dataset_id('dataset_id');
-        $show->instagram_id('instagram_id');
-        $show->created_at(trans('admin.created_at'));
-        $show->updated_at(trans('admin.updated_at'));
+        $show->page_id('ID Fanpage');
+        $show->page_name('Tên Fanpage');
+        $show->page_short_name('Tên rút gọn');
+        $show->dataset_id('Dataset ID');
+        $show->column('dataset.dataset_name', 'Tên Dataset');
+        $show->instagram_id('Instagram ID');
+        $show->pancake_token('Pancake Token')->as(function ($token) {
+            return $token ?: 'Chưa có token';
+        });
+        $show->botcake_token('Botcake Token')->as(function ($token) {
+            return $token ?: 'Chưa có token';
+        });
+        $show->created_at('Ngày tạo');
+        $show->updated_at('Cập nhật cuối');
 
         return $show;
     }
@@ -126,18 +182,29 @@ class FanPageController extends Controller
     {
         $form = new Form(new FanPage);
 
-        // $form->display('ID');
-        $form->text('page_id', 'Id Trang');
-        $form->text('page_name', 'Tên Trang');
-        $form->text('page_short_name', 'Tên rút gọn');
+        $form->text('page_id', 'ID Fanpage')
+            ->help('ID duy nhất của fanpage, tối đa 30 số');
 
-        // $form->text('dataset_id', 'dataset_id');
+        $form->text('page_name', 'Tên Fanpage')
+            ->help('Tên đầy đủ của fanpage');
+
+        $form->text('page_short_name', 'Tên rút gọn')
+            ->help('Tên rút gọn để hiển thị');
+
         $form->select('dataset_id', 'Dataset')
-         ->options(Dataset::all()->pluck('dataset_name', 'dataset_id'));
+            ->options(Dataset::all()->pluck('dataset_name', 'dataset_id'))
+            ->help('Chọn dataset liên kết với fanpage này');
 
-        $form->text('instagram_id', 'instagram_id');
-        // $form->display(trans('admin.created_at'));
-        // $form->display(trans('admin.updated_at'));
+        $form->text('instagram_id', 'Instagram ID')
+            ->help('ID Instagram liên kết (tùy chọn)');
+
+        $form->textarea('pancake_token', 'Pancake Token')
+            ->rows(3)
+            ->help('Token để kết nối với Pancake API (tùy chọn)');
+
+        $form->textarea('botcake_token', 'Botcake Token')
+            ->rows(3)
+            ->help('Token để kết nối với Botcake API (tùy chọn)');
 
         return $form;
     }
