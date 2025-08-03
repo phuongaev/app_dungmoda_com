@@ -115,7 +115,6 @@ Route::group([
 
     ############# OrderController #############
     $router->resource('pos-orders', 'PosOrderController');
-    
     // Additional routes for POS Orders
     $router->post('pos-orders/import', 'PosOrderController@import')->name('pos-orders.import');
     $router->get('pos-orders/export', 'PosOrderController@export')->name('pos-orders.export');
@@ -124,6 +123,13 @@ Route::group([
     $router->get('pos-orders/clear-cache', 'PosOrderController@clearCache')->name('pos-orders.clear-cache');
     $router->get('pos-orders/quick-search-api', 'PosOrderController@quickSearchApi')->name('pos-orders.quick-search-api');
     $router->get('pos-orders/stats-api', 'PosOrderController@getStats')->name('pos-orders.stats-api');
+
+    // Get contacts
+    $router->group(['prefix' => 'delivery'], function ($router) {
+        $router->get('contacts', 'PosOrderController@getDeliveryContacts')->name('delivery.contacts');
+    });
+
+    
 
     // POS Order Statuses routes
     $router->resource('pos-order-statuses', 'PosOrderStatusController');

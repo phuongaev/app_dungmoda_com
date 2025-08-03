@@ -12,8 +12,9 @@ use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
 use Encore\Admin\Widgets\Box;
-use Illuminate\Support\Facades\DB;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 
@@ -29,10 +30,25 @@ class PosOrderController extends Controller
      */
     public function index(Content $content)
     {
+        // return $content
+        //     ->header(trans('Quản lý đơn hàng'))
+        //     ->description(trans('Thông tin cơ bản các đơn hàng'))
+        //     ->body($this->grid());
+
+        $grid = $this->grid();
+        
+        // Tạo HTML cho modal
+        $modalHtml = view('admin.pos_orders.delivery_contacts_modal')->render();
+        
+        // Tạo script trực tiếp thay vì dùng file blade
+        $scriptHtml = $this->getDeliveryContactsScript();
+        
         return $content
             ->header(trans('Quản lý đơn hàng'))
             ->description(trans('Thông tin cơ bản các đơn hàng'))
-            ->body($this->grid());
+            ->body($grid)
+            ->body($modalHtml)   // Thêm modal
+            ->body($scriptHtml); // Thêm scripts
     }
 
     /**
@@ -199,12 +215,25 @@ class PosOrderController extends Controller
             })
             ->width(120);
 
-        $grid->column('shipment_id', 'Mã vận đơn')
-            ->display(function ($shipmentId) {
-                return $shipmentId ? $shipmentId : '<span class="text-muted">--</span>';
-            })
-            ->copyable()
-            ->width(150)->filter('like');
+        $grid->column('shipment_id', 'Mã vận đơn')->display(function ($shipmentId) {
+            $html = '';
+            
+            // Hiển thị shipment_id hoặc N/A nếu null
+            if (!empty($shipmentId)) {
+                $html .= '<span>' . $shipmentId . '</span>';
+                
+                // Chỉ hiển thị button khi có shipment_id
+                $html .= ' <button type="button" class="btn btn-xs btn-default btn-delivery-contacts" 
+                            data-shipment-id="' . $shipmentId . '"
+                            title="Xem số điện thoại nhân viên giao hàng">
+                            <i class="fa fa-phone text-primary"></i>
+                          </button>';
+            } else {
+                $html .= '<span class="text-muted">---</span>';
+            }
+            
+            return $html;
+        })->width(150)->copyable()->filter('like');
 
         $grid->column('order_sources_name', 'Nguồn')
             ->label([
@@ -404,4 +433,211 @@ class PosOrderController extends Controller
 
         return $form;
     }
+
+
+    /**
+     * Get delivery contacts for an order via AJAX
+     * Chỉ tìm kiếm bằng shipment_id
+     */
+    public function getDeliveryContacts(Request $request)
+    {
+        try {
+            $shipmentId = $request->get('shipment_id');
+            
+            // Validate shipment_id
+            if (empty($shipmentId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Thiếu mã vận đơn (shipment_id)'
+                ], 400);
+            }
+
+            // Tìm delivery contacts chỉ theo shipment_id
+            $deliveryContacts = DB::table('shipment_delivery_contacts')
+                ->where('shipment_id', $shipmentId)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            // Format dữ liệu trả về
+            $formattedContacts = $deliveryContacts->map(function ($contact) {
+                return [
+                    'delivery_name' => $contact->delivery_name ?? '',
+                    'delivery_phone' => $contact->delivery_phone ?? '',
+                    'created_at' => $contact->created_at ? Carbon::parse($contact->created_at)->format('d/m/Y H:i') : '',
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $formattedContacts,
+                'shipment_id' => $shipmentId,
+                'total' => $formattedContacts->count()
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in getDeliveryContacts: ' . $e->getMessage(), [
+                'shipment_id' => $request->get('shipment_id'),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra khi tải dữ liệu'
+            ], 500);
+        }
+    }
+
+
+    /**
+     * Generate delivery contacts script
+     */
+    private function getDeliveryContactsScript()
+    {
+        $adminUrl = admin_url('delivery/contacts');
+        
+        return <<<HTML
+        <script>
+        $(document).ready(function() {
+            
+            /**
+             * Handle click on delivery contacts button
+             */
+            $(document).on('click', '.btn-delivery-contacts', function(e) {
+                e.preventDefault();
+                
+                var shipmentId = $(this).data('shipment-id');
+                
+                // Kiểm tra shipment_id
+                if (!shipmentId) {
+                    alert('Không có mã vận đơn để tìm kiếm');
+                    return;
+                }
+                
+                // Show modal
+                $('#deliveryContactsModal').modal('show');
+                
+                // Load delivery contacts data
+                loadDeliveryContacts(shipmentId);
+            });
+            
+            /**
+             * Load delivery contacts via AJAX
+             */
+            function loadDeliveryContacts(shipmentId) {
+                // Reset modal state
+                resetModalState();
+                
+                // Show loading
+                $('#delivery-contacts-loading').show();
+                
+                // Set order info
+                $('#modal-shipment-id').text(shipmentId || 'N/A');
+                $('#delivery-contacts-order-info').show();
+                
+                // AJAX request
+                $.ajax({
+                    url: '{$adminUrl}',
+                    type: 'GET',
+                    data: {
+                        shipment_id: shipmentId
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        $('#delivery-contacts-loading').hide();
+                        
+                        if (response.success) {
+                            if (response.data && response.data.length > 0) {
+                                // Has data - show table
+                                renderDeliveryContactsTable(response.data);
+                                $('#delivery-contacts-total').text(response.total);
+                                $('#delivery-contacts-table-wrapper').show();
+                            } else {
+                                // No data
+                                $('#delivery-contacts-no-data').show();
+                            }
+                        } else {
+                            // Error from server
+                            showError(response.message || 'Có lỗi xảy ra khi tải dữ liệu');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#delivery-contacts-loading').hide();
+                        
+                        var errorMessage = 'Có lỗi xảy ra khi tải dữ liệu';
+                        
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            errorMessage = xhr.responseJSON.message;
+                        } else if (xhr.status === 404) {
+                            errorMessage = 'Không tìm thấy API endpoint';
+                        } else if (xhr.status === 500) {
+                            errorMessage = 'Lỗi máy chủ nội bộ';
+                        } else if (xhr.status === 400) {
+                            errorMessage = 'Dữ liệu không hợp lệ';
+                        }
+                        
+                        showError(errorMessage);
+                    }
+                });
+            }
+            
+            /**
+             * Render delivery contacts table
+             */
+            function renderDeliveryContactsTable(contacts) {
+                var tbody = $('#delivery-contacts-table-body');
+                tbody.empty();
+                
+                $.each(contacts, function(index, contact) {
+                    var row = '<tr>' +
+                        '<td>' + escapeHtml(contact.delivery_name) + '</td>' +
+                        '<td><span class="label label-info">' + escapeHtml(contact.delivery_phone) + '</span></td>' +
+                        '<td><small class="text-muted">' + escapeHtml(contact.created_at) + '</small></td>' +
+                        '</tr>';
+                    tbody.append(row);
+                });
+            }
+            
+            /**
+             * Show error message
+             */
+            function showError(message) {
+                $('#delivery-contacts-error-message').text(message);
+                $('#delivery-contacts-error').show();
+            }
+            
+            /**
+             * Reset modal state
+             */
+            function resetModalState() {
+                $('#delivery-contacts-loading').hide();
+                $('#delivery-contacts-order-info').hide();
+                $('#delivery-contacts-no-data').hide();
+                $('#delivery-contacts-table-wrapper').hide();
+                $('#delivery-contacts-error').hide();
+                $('#delivery-contacts-table-body').empty();
+                $('#delivery-contacts-total').text('0');
+            }
+            
+            /**
+             * Escape HTML to prevent XSS
+             */
+            function escapeHtml(text) {
+                if (!text) return '';
+                return $('<div>').text(text).html();
+            }
+            
+            /**
+             * Reset modal when closed
+             */
+            $('#deliveryContactsModal').on('hidden.bs.modal', function() {
+                resetModalState();
+            });
+        });
+        </script>
+        HTML;
+    }
+
+
+    
+
 }
