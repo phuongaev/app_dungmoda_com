@@ -233,7 +233,7 @@ class PosOrderController extends Controller
             }
             
             return $html;
-        })->width(150)->copyable()->filter('like');
+        })->width(170)->copyable()->filter('like');
 
         $grid->column('order_sources_name', 'Nguồn')
             ->label([
