@@ -75,6 +75,7 @@ Route::group([
     $router->post('attendance/check-out', 'AttendanceController@checkOut');
     $router->get('attendance/today-status', 'AttendanceController@todayStatus');
     $router->get('attendance/today-history', 'AttendanceController@todayHistory');
+    $router->get('attendance-reports', 'AttendanceReportController@index');
 
 
     // Task Categories

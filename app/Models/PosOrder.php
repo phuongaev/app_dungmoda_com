@@ -364,4 +364,45 @@ class PosOrder extends Model
         return (new \Encore\Admin\Widgets\Box('Lịch sử Workflow', $table->render()))->render();
     }
 
+
+    /**
+     * Relationship với ShipmentTask
+     * One-to-One relationship (mỗi shipment_id chỉ có 1 task)
+     */
+    public function shipmentTask()
+    {
+        return $this->hasOne(ShipmentTask::class, 'shipment_id', 'shipment_id');
+    }
+
+    /**
+     * Scope để load shipment task info
+     */
+    public function scopeWithShipmentTask($query)
+    {
+        return $query->with('shipmentTask');
+    }
+
+    /**
+     * Scope để filter các đơn hàng có shipment task với status cụ thể
+     */
+    public function scopeWithShipmentTaskStatus($query, $status)
+    {
+        return $query->whereHas('shipmentTask', function ($q) use ($status) {
+            $q->where('status', $status);
+        });
+    }
+
+    /**
+     * Scope để filter các đơn hàng có shipment_id và chưa có task
+     */
+    public function scopeShippedWithoutTask($query)
+    {
+        return $query->whereNotNull('shipment_id')
+                    ->whereDoesntHave('shipmentTask');
+    }
+
+
+
+    
+
 }

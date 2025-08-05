@@ -120,7 +120,7 @@ class PosOrderController extends Controller
         $grid->model()->select([
             'id', 'order_id', 'shipment_id', 'customer_name', 'customer_phone', 
             'cod', 'status', 'sub_status', 'dataset_status', 'status_name', 'order_sources_name', 
-            'total_quantity', 'created_at', 'pos_updated_at', 'inserted_at', 'order_link'
+            'total_quantity', 'created_at', 'pos_updated_at', 'inserted_at', 'order_link', 'updated_at'
         ])->withStatusInfo();
 
         // Filters - tối ưu với index
@@ -278,8 +278,15 @@ class PosOrderController extends Controller
             ->width(120);
 
         $grid->column('inserted_at', 'Ngày tạo')
-            ->display(function ($createdAt) {
-                return date('d/m/Y H:i', strtotime($createdAt));
+            ->display(function ($date) {
+                return date('d/m/Y H:i', strtotime($date));
+            })
+            ->sortable()
+            ->width(150);
+
+        $grid->column('updated_at', 'Cập nhật')
+            ->display(function ($date) {
+                return date('d/m/Y H:i', strtotime($date));
             })
             ->sortable()
             ->width(150);
@@ -303,7 +310,7 @@ class PosOrderController extends Controller
         });
 
         // Pagination
-        $grid->paginate(20);
+        $grid->paginate(25);
 
         // Export
         // $grid->exporter(new PosOrderExporter());

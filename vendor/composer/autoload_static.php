@@ -756,6 +756,7 @@ class ComposerStaticInite57ff5ffcb5f3d55d67bf8c03349c4c9
         'App\\Models\\RequestHistory' => __DIR__ . '/../..' . '/app/Models/RequestHistory.php',
         'App\\Models\\ShiftSwapRequest' => __DIR__ . '/../..' . '/app/Models/ShiftSwapRequest.php',
         'App\\Models\\Shipment' => __DIR__ . '/../..' . '/app/Models/Shipment.php',
+        'App\\Models\\ShipmentTask' => __DIR__ . '/../..' . '/app/Models/ShipmentTask.php',
         'App\\Models\\TaskCategory' => __DIR__ . '/../..' . '/app/Models/TaskCategory.php',
         'App\\Models\\TelegramHistory' => __DIR__ . '/../..' . '/app/Models/TelegramHistory.php',
         'App\\Models\\User' => __DIR__ . '/../..' . '/app/Models/User.php',

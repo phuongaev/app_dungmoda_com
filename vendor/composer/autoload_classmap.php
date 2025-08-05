@@ -139,6 +139,7 @@ return array(
     'App\\Models\\RequestHistory' => $baseDir . '/app/Models/RequestHistory.php',
     'App\\Models\\ShiftSwapRequest' => $baseDir . '/app/Models/ShiftSwapRequest.php',
     'App\\Models\\Shipment' => $baseDir . '/app/Models/Shipment.php',
+    'App\\Models\\ShipmentTask' => $baseDir . '/app/Models/ShipmentTask.php',
     'App\\Models\\TaskCategory' => $baseDir . '/app/Models/TaskCategory.php',
     'App\\Models\\TelegramHistory' => $baseDir . '/app/Models/TelegramHistory.php',
     'App\\Models\\User' => $baseDir . '/app/Models/User.php',
