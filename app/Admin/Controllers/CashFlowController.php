@@ -71,7 +71,7 @@ class CashFlowController extends AdminController
         // column created_at
         $grid->column('created_at', __('Tạo lúc'))
             ->display(function ($created_at) {
-                return date("Y-m-d H:i:s", strtotime($created_at));
+                return $created_at ? \Carbon\Carbon::parse($created_at)->format('Y-m-d H:i:s') : '';
             })
             ->filter('range', 'datetime')
             ->width(120);

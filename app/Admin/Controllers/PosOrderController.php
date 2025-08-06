@@ -279,14 +279,14 @@ class PosOrderController extends Controller
 
         $grid->column('inserted_at', 'Ngày tạo')
             ->display(function ($date) {
-                return date('d/m/Y H:i', strtotime($date));
+                return $date ? Carbon::parse($date)->format('Y-m-d H:i:s') : '';
             })
             ->sortable()
             ->width(150);
 
         $grid->column('updated_at', 'Cập nhật')
             ->display(function ($date) {
-                return date('d/m/Y H:i', strtotime($date));
+                return $date ? Carbon::parse($date)->format('Y-m-d H:i:s') : '';
             })
             ->sortable()
             ->width(150);
