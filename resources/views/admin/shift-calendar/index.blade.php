@@ -12,6 +12,7 @@
      data-delete-url="{{ route('admin.shifts.delete') }}"
      data-available-users-url="{{ route('admin.shifts.available_users') }}"
      data-available-shifts-url="{{ route('admin.shifts.available') }}"
+     data-create-leave-url="{{ route('admin.shifts.create_leave') }}"
      data-csrf-token="{{ csrf_token() }}">
     
     <div class="calendar-page-container">

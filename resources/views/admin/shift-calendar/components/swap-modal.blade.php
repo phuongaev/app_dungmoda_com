@@ -46,6 +46,11 @@
                             <i class="fa fa-exchange"></i> Hoán đổi ca trực
                         </a>
                     </li>
+                    <li role="presentation" id="addLeaveTabLi">
+                        <a href="#addLeaveTab" aria-controls="addLeaveTab" role="tab" data-toggle="tab">
+                            <i class="fa fa-bed"></i> Thêm ngày nghỉ
+                        </a>
+                    </li>
                 </ul>
 
                 <!-- Tab contents -->
@@ -112,6 +117,30 @@
                             </button>
                         </div>
                     </div>
+
+                    <!-- Tab thêm ngày nghỉ -->
+                    <div role="tabpanel" class="tab-pane" id="addLeaveTab">
+                        <div class="form-group">
+                            <label for="leaveEmployeeSelect">Chọn nhân viên nghỉ phép:</label>
+                            <select id="leaveEmployeeSelect" class="form-control" style="width: 100%;">
+                                <option value="">-- Chọn nhân viên --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="alert alert-warning">
+                            <i class="fa fa-info-circle"></i>
+                            <strong>Lưu ý:</strong> Tạo ngày nghỉ cho nhân viên vào ngày được chọn. Đơn sẽ được duyệt tự động và nhân viên không thể hủy.
+                        </div>
+
+                        <div class="text-right">
+                            <button type="button" class="btn btn-warning" id="confirmAddLeaveBtn">
+                                <i class="fa fa-bed"></i> Tạo ngày nghỉ
+                            </button>
+                        </div>
+                    </div>
+
+
+                    
                 </div>
             </div>
             <div class="modal-footer">

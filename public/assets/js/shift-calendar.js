@@ -63,6 +63,7 @@
             deleteUrl: container.dataset.deleteUrl,
             availableUsersUrl: container.dataset.availableUsersUrl,
             availableShiftsUrl: container.dataset.availableShiftsUrl,
+            createLeaveUrl: container.dataset.createLeaveUrl, // NEW: URL cho tạo nghỉ phép
             csrfToken: container.dataset.csrfToken
         };
     }
@@ -133,11 +134,13 @@
         const addShiftTabLi = document.getElementById('addShiftTabLi');
         const changePersonTabLi = document.getElementById('changePersonTabLi');
         const swapShiftTabLi = document.getElementById('swapShiftTabLi');
+        const addLeaveTabLi = document.getElementById('addLeaveTabLi'); // NEW
         const deleteShiftBtn = document.getElementById('deleteShiftBtn');
 
         if (mode === 'add') {
-            // Show add shift tab, hide others
+            // Show add shift tab and add leave tab, hide others
             if (addShiftTabLi) addShiftTabLi.style.display = 'block';
+            if (addLeaveTabLi) addLeaveTabLi.style.display = 'block'; // NEW: Show add leave tab
             if (changePersonTabLi) changePersonTabLi.style.display = 'none';
             if (swapShiftTabLi) swapShiftTabLi.style.display = 'none';
             
@@ -149,8 +152,9 @@
                 window.jQuery('#addShiftTab').tab('show');
             }
         } else if (mode === 'edit') {
-            // Hide add shift tab, show others
+            // Hide add shift tab and add leave tab, show others
             if (addShiftTabLi) addShiftTabLi.style.display = 'none';
+            if (addLeaveTabLi) addLeaveTabLi.style.display = 'none'; // NEW: Hide add leave tab
             if (changePersonTabLi) changePersonTabLi.style.display = 'block';
             if (swapShiftTabLi) swapShiftTabLi.style.display = 'block';
             
@@ -203,6 +207,49 @@
         })
         .catch(error => {
             console.error('Error loading available users for add:', error);
+            userSelect.innerHTML = '<option value="">-- Lỗi tải dữ liệu --</option>';
+        });
+    }
+
+    /**
+     * Load available users for add leave (NEW FUNCTION)
+     */
+    function loadAvailableUsersForLeave(config) {
+        const userSelect = document.getElementById('leaveEmployeeSelect');
+        if (!userSelect) return;
+
+        // Clear existing options
+        userSelect.innerHTML = '<option value="">-- Đang tải... --</option>';
+
+        fetch(config.availableUsersUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': config.csrfToken
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            userSelect.innerHTML = '<option value="">-- Chọn nhân viên --</option>';
+            
+            if (data.status === 'success' && data.data) {
+                data.data.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = user.name;
+                    userSelect.appendChild(option);
+                });
+            }
+
+            // Reinitialize Select2 if available
+            if (window.jQuery && window.jQuery.fn.select2) {
+                window.jQuery(userSelect).select2({
+                    dropdownParent: window.jQuery('#manageShiftModal')
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading available users for leave:', error);
             userSelect.innerHTML = '<option value="">-- Lỗi tải dữ liệu --</option>';
         });
     }
@@ -355,6 +402,67 @@
     }
 
     /**
+     * Handle add leave confirmation (NEW FUNCTION)
+     */
+    function handleAddLeaveConfirmation(config) {
+        const confirmBtn = document.getElementById('confirmAddLeaveBtn');
+        const userSelect = document.getElementById('leaveEmployeeSelect');
+        
+        if (!confirmBtn || !userSelect) return;
+
+        const selectedDate = confirmBtn.dataset.selectedDate;
+        const userId = userSelect.value;
+
+        if (!userId) {
+            showToast('warning', 'Vui lòng chọn nhân viên.');
+            return;
+        }
+
+        // Show loading state
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang xử lý...';
+
+        fetch(config.createLeaveUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': config.csrfToken
+            },
+            body: JSON.stringify({
+                admin_user_id: userId,
+                leave_date: selectedDate
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showToast('success', data.message);
+                
+                // Hide modal
+                if (window.jQuery) {
+                    window.jQuery('#manageShiftModal').modal('hide');
+                }
+                
+                // Refresh calendar
+                if (calendar) {
+                    calendar.refetchEvents();
+                }
+            } else {
+                showToast('error', data.message || 'Có lỗi xảy ra.');
+            }
+        })
+        .catch(error => {
+            console.error('Add leave error:', error);
+            showToast('error', 'Lỗi kết nối. Không thể tạo ngày nghỉ.');
+        })
+        .finally(() => {
+            // Reset button state
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<i class="fa fa-bed"></i> Tạo ngày nghỉ';
+        });
+    }
+
+    /**
      * Handle change person confirmation
      */
     function handleChangePersonConfirmation(config) {
@@ -416,7 +524,7 @@
     }
 
     /**
-     * Handle delete shift confirmation - NEW FUNCTION
+     * Handle delete shift confirmation
      */
     function handleDeleteShiftConfirmation(config) {
         const deleteBtn = document.getElementById('deleteShiftBtn');
@@ -597,19 +705,21 @@
                 // Setup modal for adding new shift
                 const selectedDateInfo = document.getElementById('selectedDateInfo');
                 const confirmAddShiftBtn = document.getElementById('confirmAddShiftBtn');
+                const confirmAddLeaveBtn = document.getElementById('confirmAddLeaveBtn'); // NEW
                 const currentShiftInfoGroup = document.getElementById('currentShiftInfoGroup');
                 const selectedDateInfoGroup = document.getElementById('selectedDateInfoGroup');
 
-                if (selectedDateInfo && confirmAddShiftBtn) {
+                if (selectedDateInfo && confirmAddShiftBtn && confirmAddLeaveBtn) {
                     // Update selected date info
                     const formattedDate = new Date(info.dateStr).toLocaleDateString('vi-VN');
                     selectedDateInfo.innerHTML = `
                         <strong>${formattedDate}</strong><br>
-                        <small>Thêm ca trực mới cho ngày này</small>
+                        <small>Thêm ca trực hoặc ngày nghỉ cho ngày này</small>
                     `;
                     
-                    // Set selected date for add shift button
+                    // Set selected date for both add shift and add leave buttons
                     confirmAddShiftBtn.dataset.selectedDate = info.dateStr;
+                    confirmAddLeaveBtn.dataset.selectedDate = info.dateStr; // NEW
                     
                     // Show/hide appropriate groups
                     if (currentShiftInfoGroup) currentShiftInfoGroup.style.display = 'none';
@@ -618,14 +728,15 @@
                     // Update modal title
                     const modalTitle = document.getElementById('manageShiftModalLabel');
                     if (modalTitle) {
-                        modalTitle.innerHTML = '<i class="fa fa-plus"></i> Thêm ca trực mới';
+                        modalTitle.innerHTML = '<i class="fa fa-plus"></i> Thêm ca trực hoặc ngày nghỉ';
                     }
                     
                     // Show appropriate tabs
                     showTabsForMode('add');
                     
-                    // Load available users
+                    // Load available users for both add shift and add leave
                     loadAvailableUsersForAdd(config);
+                    loadAvailableUsersForLeave(config); // NEW
                     
                     // Show modal
                     if (window.jQuery) {
@@ -752,6 +863,18 @@
             });
         }
 
+        // Handle add leave button (NEW)
+        const confirmAddLeaveBtn = document.getElementById('confirmAddLeaveBtn');
+        if (confirmAddLeaveBtn) {
+            // Remove existing event listeners
+            confirmAddLeaveBtn.replaceWith(confirmAddLeaveBtn.cloneNode(true));
+            const newConfirmAddLeaveBtn = document.getElementById('confirmAddLeaveBtn');
+            
+            newConfirmAddLeaveBtn.addEventListener('click', function() {
+                handleAddLeaveConfirmation(config);
+            });
+        }
+
         // Handle change person button
         const confirmChangePersonBtn = document.getElementById('confirmChangePersonBtn');
         if (confirmChangePersonBtn) {
@@ -792,11 +915,19 @@
         if (window.jQuery) {
             window.jQuery('#manageShiftModal').off('shown.bs.modal').on('shown.bs.modal', function() {
                 const addUserSelect = document.getElementById('addShiftUserSelect');
+                const leaveEmployeeSelect = document.getElementById('leaveEmployeeSelect'); // NEW
                 const userSelect = document.getElementById('newPersonSelect');
                 const shiftSelect = document.getElementById('targetShiftSelect');
                 
                 if (addUserSelect && window.jQuery.fn.select2) {
                     window.jQuery(addUserSelect).select2({
+                        dropdownParent: window.jQuery('#manageShiftModal')
+                    });
+                }
+                
+                // NEW: Initialize select2 for leave employee select
+                if (leaveEmployeeSelect && window.jQuery.fn.select2) {
+                    window.jQuery(leaveEmployeeSelect).select2({
                         dropdownParent: window.jQuery('#manageShiftModal')
                     });
                 }
@@ -818,6 +949,7 @@
             window.jQuery('#manageShiftModal').off('hidden.bs.modal').on('hidden.bs.modal', function() {
                 // Reset dropdowns
                 const addUserSelect = document.getElementById('addShiftUserSelect');
+                const leaveEmployeeSelect = document.getElementById('leaveEmployeeSelect'); // NEW
                 const userSelect = document.getElementById('newPersonSelect');
                 const shiftSelect = document.getElementById('targetShiftSelect');
                 const deleteShiftBtn = document.getElementById('deleteShiftBtn');
@@ -826,6 +958,14 @@
                     addUserSelect.selectedIndex = 0;
                     if (window.jQuery.fn.select2) {
                         window.jQuery(addUserSelect).val(null).trigger('change');
+                    }
+                }
+                
+                // NEW: Reset leave employee select
+                if (leaveEmployeeSelect) {
+                    leaveEmployeeSelect.selectedIndex = 0;
+                    if (window.jQuery.fn.select2) {
+                        window.jQuery(leaveEmployeeSelect).val(null).trigger('change');
                     }
                 }
                 
@@ -853,10 +993,12 @@
 
                 // Show all tabs for next use
                 const addShiftTabLi = document.getElementById('addShiftTabLi');
+                const addLeaveTabLi = document.getElementById('addLeaveTabLi'); // NEW
                 const changePersonTabLi = document.getElementById('changePersonTabLi');
                 const swapShiftTabLi = document.getElementById('swapShiftTabLi');
                 
                 if (addShiftTabLi) addShiftTabLi.style.display = 'block';
+                if (addLeaveTabLi) addLeaveTabLi.style.display = 'block'; // NEW
                 if (changePersonTabLi) changePersonTabLi.style.display = 'block';
                 if (swapShiftTabLi) swapShiftTabLi.style.display = 'block';
 

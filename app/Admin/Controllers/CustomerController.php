@@ -108,7 +108,7 @@ class CustomerController extends Controller
 
         // $grid->zalo_task_id('zalo_task_id');
         $grid->column('zaloTask.zalo_task_name', 'Nhiệm vụ Zalo');
-        $grid->zalo_name('Tên Zalo');
+        $grid->zalo_name('Tên Zalo')->filter('like');
         // $grid->thread_id('Thread Id');
 
         $grid->priority_id('Ưu tiên');

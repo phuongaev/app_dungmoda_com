@@ -14,73 +14,6 @@ use Illuminate\Support\Facades\Log;
 class ShiftCalendarService
 {
     /**
-     * Get events for calendar display
-     */
-    public function getEvents($start, $end)
-    {
-        $startDate = Carbon::parse($start)->startOfDay();
-        $endDate = Carbon::parse($end)->endOfDay();
-        
-        // Lấy tất cả ca trực trong khoảng thời gian
-        $shifts = EveningShift::getCalendarData($startDate, $endDate);
-        
-        // Lấy thông tin người nghỉ để hiển thị
-        $leaveEvents = $this->getLeaveEvents($startDate, $endDate);
-        
-        // Merge shifts và leave events
-        $allEvents = $shifts->concat($leaveEvents);
-        
-        return $allEvents->toArray();
-    }
-
-    /**
-     * Get leave events for calendar
-     */
-    private function getLeaveEvents($startDate, $endDate)
-    {
-        $leaveRequests = LeaveRequest::with('employee')
-            ->where('status', LeaveRequest::STATUS_APPROVED)
-            ->inDateRange($startDate, $endDate)
-            ->get();
-
-        $leaveEvents = collect();
-
-        foreach ($leaveRequests as $leave) {
-            // Tạo event cho mỗi ngày trong khoảng nghỉ
-            $currentDate = $leave->start_date->copy();
-            while ($currentDate->lte($leave->end_date)) {
-                // Kiểm tra xem ngày này có ca trực không
-                $hasShift = EveningShift::where('shift_date', $currentDate)->exists();
-                
-                $leaveEvents->push([
-                    'id' => 'leave-' . $leave->id . '-' . $currentDate->format('Y-m-d'),
-                    'title' => '🏠 ' . $leave->employee->name . ' (nghỉ)',
-                    'start' => $currentDate->format('Y-m-d'),
-                    'allDay' => true,
-                    'className' => 'leave-event',
-                    'backgroundColor' => '#dc3545',
-                    'borderColor' => '#c82333',
-                    'textColor' => '#ffffff',
-                    'overlap' => true,
-                    'rendering' => $hasShift ? 'background' : 'normal',
-                    'leave_info' => [
-                        'employee_name' => $leave->employee->name,
-                        'leave_id' => $leave->id,
-                        'reason' => $leave->reason,
-                        'start_date' => $leave->start_date->format('d/m/Y'),
-                        'end_date' => $leave->end_date->format('d/m/Y'),
-                        'total_days' => $leave->total_days
-                    ]
-                ]);
-                
-                $currentDate->addDay();
-            }
-        }
-
-        return $leaveEvents;
-    }
-
-    /**
      * Get available users for shift assignment
      */
     public function getAvailableUsers()
@@ -686,6 +619,86 @@ class ShiftCalendarService
     }
 
 
+    /**
+     * Create leave request for employee (Admin function)
+     */
+    public function createLeaveForEmployee($userId, $leaveDate)
+    {
+        try {
+            DB::beginTransaction();
 
+            // Parse date
+            $date = Carbon::parse($leaveDate)->startOfDay();
+
+            // Validate: không tạo cho ngày trong quá khứ
+            if ($date->lt(Carbon::today())) {
+                return [
+                    'success' => false,
+                    'message' => 'Không thể tạo ngày nghỉ cho ngày đã qua.'
+                ];
+            }
+
+            // Kiểm tra nhân viên có tồn tại không
+            $user = Administrator::find($userId);
+            if (!$user) {
+                return [
+                    'success' => false,
+                    'message' => 'Không tìm thấy nhân viên.'
+                ];
+            }
+
+            // Kiểm tra xem nhân viên đã có đơn nghỉ trong ngày này chưa
+            $existingLeave = LeaveRequest::where('admin_user_id', $userId)
+                ->where('status', '!=', LeaveRequest::STATUS_REJECTED)
+                ->where('status', '!=', LeaveRequest::STATUS_CANCELLED)
+                ->where('start_date', '<=', $date)
+                ->where('end_date', '>=', $date)
+                ->exists();
+
+            if ($existingLeave) {
+                return [
+                    'success' => false,
+                    'message' => 'Nhân viên đã có đơn nghỉ trong ngày này rồi.'
+                ];
+            }
+
+            // Tạo đơn nghỉ phép mới
+            $leaveRequest = LeaveRequest::create([
+                'admin_user_id' => $userId,
+                'start_date' => $date,
+                'end_date' => $date,
+                'reason' => 'Được admin tạo từ lịch',
+                'status' => LeaveRequest::STATUS_APPROVED,
+                'approved_by' => \Encore\Admin\Facades\Admin::user()->id,
+                'approved_at' => now(),
+                'created_by_admin' => true,
+                'admin_notes' => 'Tạo từ shift calendar'
+            ]);
+
+            // Lưu lịch sử
+            $leaveRequest->addHistory(
+                \App\Models\RequestHistory::ACTION_APPROVED,
+                \Encore\Admin\Facades\Admin::user()->id,
+                'Admin tạo ngày nghỉ từ lịch'
+            );
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'message' => 'Đã tạo ngày nghỉ cho ' . $user->name . ' thành công!',
+                'leave' => $leaveRequest
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error in createLeaveForEmployee: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => 'Có lỗi xảy ra khi tạo ngày nghỉ: ' . $e->getMessage()
+            ];
+        }
+    }
     
 }

@@ -47,6 +47,7 @@ class ShiftCalendarController extends AdminController
             $start = Carbon::parse($request->input('start'));
             $end = Carbon::parse($request->input('end'));
 
+            // Lấy shifts với thông tin leave đã được include trong on_leave_users
             $shifts = $this->shiftCalendarService->getShiftsByDateRange($start, $end);
             $events = $this->shiftCalendarService->formatShiftsForCalendar($shifts);
 
@@ -55,7 +56,7 @@ class ShiftCalendarController extends AdminController
             Log::error('Error fetching calendar events: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Unable to fetch calendar data'
+                'message' => 'Không thể tải dữ liệu lịch.'
             ], 500);
         }
     }
@@ -345,6 +346,52 @@ class ShiftCalendarController extends AdminController
                 'status' => 'error',
                 'message' => 'Lỗi khi xóa ca trực: ' . $e->getMessage()
             ]);
+        }
+    }
+
+
+    /**
+     * Create leave request for employee from calendar
+     */
+    public function createLeaveForEmployee(Request $request)
+    {
+        if (!Admin::user()->isRole('administrator')) {
+            return response()->json([
+                'status' => 'error', 
+                'message' => 'Không có quyền thực hiện hành động này.'
+            ], 403);
+        }
+
+        $request->validate([
+            'admin_user_id' => 'required|exists:admin_users,id',
+            'leave_date' => 'required|date|after_or_equal:today'
+        ]);
+
+        try {
+            $result = $this->shiftCalendarService->createLeaveForEmployee(
+                $request->input('admin_user_id'),
+                $request->input('leave_date')
+            );
+
+            if ($result['success']) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => $result['message'],
+                    'data' => $result['leave']
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $result['message']
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Error creating leave for employee: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không thể tạo ngày nghỉ cho nhân viên.'
+            ], 500);
         }
     }
 }

@@ -20,7 +20,8 @@ class LeaveRequest extends Model
         'status',
         'admin_notes',
         'approved_by',
-        'approved_at'
+        'approved_at',
+        'created_by_admin'
     ];
 
     protected $dates = [
@@ -82,7 +83,12 @@ class LeaveRequest extends Model
      */
     public function canBeCancelled()
     {
-        return in_array($this->status, [self::STATUS_PENDING]);
+        // Nếu đơn do admin tạo thì không cho phép hủy
+        if ($this->created_by_admin) {
+            return false;
+        }
+        
+        return in_array($this->status, [self::STATUS_PENDING, self::STATUS_APPROVED]);
     }
 
     /**

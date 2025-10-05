@@ -118,8 +118,8 @@ class EmployeeLeaveRequestController extends AdminController
         $grid->actions(function ($actions) {
             $actions->disableEdit();
             
-            // Chỉ cho phép hủy đơn pending
-            if ($actions->row->status === LeaveRequest::STATUS_PENDING) {
+            // Chỉ cho phép hủy đơn pending VÀ không phải do admin tạo
+            if ($actions->row->status === LeaveRequest::STATUS_PENDING && !$actions->row->created_by_admin) {
                 $actions->add(new \App\Admin\Actions\EmployeeCancelLeaveAction());
             }
         });
