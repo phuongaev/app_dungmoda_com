@@ -94,14 +94,13 @@ class AttendanceController extends Controller
         $grid->model()->orderBy('work_date', 'desc')->orderBy('check_in_time', 'desc');
 
         $grid->column('id', __('ID'))->sortable();
-        
-        $grid->column('user.name', __('Nhân viên'))->filter('like');
+
+        $grid->column('user.name', __('Nhân viên'));
         
         $grid->column('work_date', __('Ngày làm việc'))
             ->display(function ($value) {
                 return $value ? date('d/m/Y', strtotime($value)) : '';
             })
-            ->filter('date')
             ->sortable();
 
         $grid->column('check_in_time', __('Giờ vào'))
@@ -151,6 +150,18 @@ class AttendanceController extends Controller
             'checked_out' => 'primary',
             'incomplete' => 'warning'
         ]);
+
+        // Thêm filter dropdown cho nhân viên
+        $grid->filter(function($filter) {
+            // Lấy danh sách tất cả nhân viên
+            $users = Administrator::all()->pluck('name', 'id');
+            
+            // Filter theo nhân viên - dropdown select
+            $filter->equal('user_id', 'Nhân viên')->select($users);
+
+            // Filter theo khoảng thời gian (date range)
+            $filter->between('work_date', 'Khoảng thời gian')->date();
+        });
 
         return $grid;
     }
