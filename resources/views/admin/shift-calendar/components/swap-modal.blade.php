@@ -51,6 +51,13 @@
                             <i class="fa fa-bed"></i> Thêm ngày nghỉ
                         </a>
                     </li>
+
+                    <li role="presentation" id="changeLeavePersonTabLi" style="display: none;">
+                        <a href="#changeLeavePersonTab" aria-controls="changeLeavePersonTab" role="tab" data-toggle="tab">
+                            <i class="fa fa-exchange"></i> Đổi người nghỉ
+                        </a>
+                    </li>
+
                 </ul>
 
                 <!-- Tab contents -->
@@ -139,6 +146,38 @@
                         </div>
                     </div>
 
+
+                    <!-- Tab thay đổi người nghỉ phép -->
+                    <div role="tabpanel" class="tab-pane" id="changeLeavePersonTab">
+                        <div class="form-group">
+                            <div id="changeLeaveInfo">
+                                <!-- Thông tin sẽ được load bởi JS -->
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="changeLeavePersonSelect">Chọn người nghỉ thay thế:</label>
+                            <select id="changeLeavePersonSelect" class="form-control" style="width: 100%;">
+                                <option value="">-- Chọn nhân viên --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fa fa-info-circle"></i>
+                            <strong>Lưu ý:</strong> Thao tác này sẽ:
+                            <ul style="margin-top: 5px; margin-bottom: 0;">
+                                <li>Xóa hoặc cập nhật phiếu nghỉ của người cũ</li>
+                                <li>Tạo phiếu nghỉ mới cho người được chọn</li>
+                                <li>Phiếu mới sẽ được duyệt tự động</li>
+                            </ul>
+                        </div>
+
+                        <div class="text-right">
+                            <button type="button" class="btn btn-warning" id="confirmChangeLeavePersonBtn">
+                                <i class="fa fa-exchange"></i> Xác nhận thay đổi
+                            </button>
+                        </div>
+                    </div>
 
                     
                 </div>

@@ -155,6 +155,7 @@ Route::group([
     $router->get('shifts/available-users', 'ShiftCalendarController@getAvailableUsers')->name('shifts.available_users');
     $router->get('shifts/available', 'ShiftCalendarController@getAvailableShifts')->name('shifts.available');
     $router->post('shifts/create-leave', 'ShiftCalendarController@createLeaveForEmployee')->name('shifts.create_leave');
+    $router->get('shifts/leave-events', 'ShiftCalendarController@leaveEvents')->name('shifts.leave_events');
 
 
     ############# NEW: Admin Leave Request Management #############
@@ -162,6 +163,7 @@ Route::group([
     $router->post('leave-requests/{id}/approve', 'LeaveRequestController@approve')->name('leave-requests.approve');
     $router->post('leave-requests/{id}/reject', 'LeaveRequestController@reject')->name('leave-requests.reject');
     $router->post('leave-requests/{id}/cancel', 'LeaveRequestController@cancel')->name('leave-requests.cancel');
+    $router->post('leave-requests/change-person', 'LeaveRequestController@changePerson')->name('leave-requests.change_person');
 
     ############# NEW: Admin Shift Swap Request Management #############
     $router->resource('shift-swap-requests', 'ShiftSwapRequestController')->except(['create', 'store', 'edit', 'update']);

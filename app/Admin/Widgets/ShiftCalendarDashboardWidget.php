@@ -19,7 +19,7 @@ class ShiftCalendarDashboardWidget extends Box
     /**
      * @var string
      */
-    protected $title = 'Lịch trực ca tối';
+    protected $title = 'Lịch làm việc';
 
     /**
      * Widget constructor.

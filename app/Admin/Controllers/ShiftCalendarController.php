@@ -394,4 +394,31 @@ class ShiftCalendarController extends AdminController
             ], 500);
         }
     }
+
+
+    /**
+     * API endpoint for leave events (all approved leave requests)
+     */
+    public function leaveEvents(Request $request)
+    {
+        try {
+            $request->validate([
+                'start' => 'required|date',
+                'end' => 'required|date'
+            ]);
+
+            $start = Carbon::parse($request->input('start'));
+            $end = Carbon::parse($request->input('end'));
+
+            $leaveData = $this->shiftCalendarService->getLeaveEventsByDateRange($start, $end);
+
+            return response()->json($leaveData);
+        } catch (\Exception $e) {
+            Log::error('Error fetching leave events: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không thể tải dữ liệu nghỉ phép.'
+            ], 500);
+        }
+    }
 }

@@ -12,6 +12,8 @@ use Encore\Admin\Layout\Content;
 use Encore\Admin\Facades\Admin;
 use Illuminate\Http\Request;
 
+use Illuminate\Support\Facades\Log;
+
 class LeaveRequestController extends AdminController
 {
     protected $title = 'Quản lý đơn xin nghỉ';
@@ -290,4 +292,60 @@ class LeaveRequestController extends AdminController
             ]);
         }
     }
+
+
+    /**
+     * Change leave request person
+     */
+    public function changePerson(Request $request)
+    {
+        if (!Admin::user()->isRole('administrator')) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Không có quyền thực hiện hành động này.'
+            ], 403);
+        }
+
+        $request->validate([
+            'leave_request_id' => 'required|exists:leave_requests,id',
+            'change_date' => 'required|date',
+            'new_user_id' => 'required|exists:admin_users,id'
+        ]);
+
+        try {
+            $service = new \App\Services\LeaveRequestService();
+            
+            $result = $service->changePersonOnDate(
+                $request->input('leave_request_id'),
+                $request->input('change_date'),
+                $request->input('new_user_id')
+            );
+
+            if ($result['success']) {
+                return response()->json([
+                    'status' => true,
+                    'message' => $result['message'],
+                    'data' => [
+                        'old_user' => $result['old_user'],
+                        'new_user' => $result['new_user']
+                    ]
+                ]);
+            }
+
+            return response()->json([
+                'status' => false,
+                'message' => $result['message']
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Error changing leave person: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
 }

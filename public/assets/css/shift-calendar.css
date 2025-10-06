@@ -417,3 +417,42 @@
     color: #3c8dbc;
     font-weight: 700;
 }
+
+/* Style cho thông tin nhân viên nghỉ phép */
+.leave-info-below {
+    color: #9f4d13 !important;
+    font-size: 11px !important;
+    font-weight: normal !important;
+    line-height: 1.2;
+    margin-top: 4px;
+    padding: 2px 5px;
+    background-color: rgba(108, 117, 125, 0.1);
+    border-radius: 3px;
+    display: block;
+}
+/* Fix white text issue in change leave form */
+#changeLeaveInfo .list-group-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    margin-bottom: 5px;
+}
+
+#changeLeaveInfo .list-group-item:hover {
+    background-color: #e8f4f8;
+    border-color: #bce8f1;
+}
+
+#changeLeaveInfo .list-group-item strong {
+    color: #333 !important;
+}
+
+#changeLeaveInfo .list-group-item input[type="radio"] {
+    margin-right: 10px;
+}
+
+/* Style for selected radio */
+#changeLeaveInfo .list-group-item input[type="radio"]:checked + strong {
+    color: #31708f !important;
+}

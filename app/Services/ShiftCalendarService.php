@@ -700,5 +700,63 @@ class ShiftCalendarService
             ];
         }
     }
+
+
+    /**
+     * Get leave events by date range for calendar display
+     * Returns data grouped by date
+     */
+    public function getLeaveEventsByDateRange($startDate, $endDate)
+    {
+        // Lấy tất cả leave requests đã approved trong khoảng thời gian
+        $leaveRequests = LeaveRequest::with('employee')
+            ->where('status', LeaveRequest::STATUS_APPROVED)
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    // Leave overlaps with date range
+                    $q->whereBetween('start_date', [$startDate, $endDate])
+                      ->orWhereBetween('end_date', [$startDate, $endDate])
+                      ->orWhere(function ($subQ) use ($startDate, $endDate) {
+                          $subQ->where('start_date', '<=', $startDate)
+                               ->where('end_date', '>=', $endDate);
+                      });
+                });
+            })
+            ->get();
+
+        // Group leave data by date
+        $leaveByDate = [];
+        
+        foreach ($leaveRequests as $leave) {
+            $currentDate = Carbon::parse($leave->start_date);
+            $endDate = Carbon::parse($leave->end_date);
+            
+            // Loop through each day of the leave period
+            while ($currentDate->lte($endDate)) {
+                $dateKey = $currentDate->format('Y-m-d');
+                
+                if (!isset($leaveByDate[$dateKey])) {
+                    $leaveByDate[$dateKey] = [];
+                }
+                
+                $leaveByDate[$dateKey][] = [
+                    'id' => $leave->employee->id,
+                    'name' => $leave->employee->name,
+                    'created_by_admin' => $leave->created_by_admin,
+                    'leave_request_id' => $leave->id
+                ];
+                
+                $currentDate->addDay();
+            }
+        }
+        
+        return $leaveByDate;
+    }
+
+
+
+
+
+    
     
 }

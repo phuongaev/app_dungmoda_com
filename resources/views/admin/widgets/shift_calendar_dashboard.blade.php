@@ -65,7 +65,7 @@
 <!-- === HTML CHO WIDGET === -->
 <div class="box box-primary shift-calendar-widget-container">
     <div class="box-header with-border">
-        <h3 class="box-title"><i class="fa fa-calendar"></i> Lịch trực ca tối</h3>
+        <h3 class="box-title"><i class="fa fa-calendar"></i> Lịch làm việc</h3>
         <div class="box-tools pull-right">
             <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
         </div>
@@ -104,32 +104,103 @@
             if (calendarEl && !calendarEl.classList.contains('fc-loaded')) {
                 calendarEl.classList.add('fc-loaded');
 
-                var calendar = new FullCalendar.Calendar(calendarEl, {
+                // Object để lưu dữ liệu nghỉ phép theo ngày
+                var leaveDataByDate = {};
+                var calendar;
+
+                // Function để thêm leave info vào calendar cells
+                function addLeaveInfoToCells() {
+                    // Tìm tất cả các day cells
+                    var dayCells = calendarEl.querySelectorAll('.fc-daygrid-day');
+                    
+                    dayCells.forEach(function(dayCell) {
+                        // Lấy date từ data attribute
+                        var dateAttr = dayCell.getAttribute('data-date');
+                        if (!dateAttr) return;
+                        
+                        var leaveUsers = leaveDataByDate[dateAttr] || [];
+                        
+                        if (leaveUsers.length > 0) {
+                            var dayFrame = dayCell.querySelector('.fc-daygrid-day-frame');
+                            if (dayFrame) {
+                                // Xóa leave info cũ nếu có
+                                var existingLeaveInfo = dayFrame.querySelector('.leave-info-below');
+                                if (existingLeaveInfo) {
+                                    existingLeaveInfo.remove();
+                                }
+                                
+                                // Tạo text hiển thị
+                                var leaveUsersText = leaveUsers.map(function(user) {
+                                    return user.name + ' (nghỉ)';
+                                }).join(', ');
+                                
+                                // Tạo element
+                                var leaveInfoEl = document.createElement('div');
+                                leaveInfoEl.className = 'leave-info-below';
+                                leaveInfoEl.textContent = leaveUsersText;
+                                
+                                // Thêm vào cuối day cell
+                                dayFrame.appendChild(leaveInfoEl);
+                            }
+                        }
+                    });
+                }
+
+                // Function để fetch dữ liệu nghỉ phép
+                function fetchLeaveData() {
+                    if (!calendar) return;
+                    
+                    var view = calendar.view;
+                    var start = view.activeStart.toISOString().split('T')[0];
+                    var end = view.activeEnd.toISOString().split('T')[0];
+                    
+                    $.ajax({
+                        url: '{{ route("admin.shifts.leave_events") }}',
+                        method: 'GET',
+                        data: {
+                            start: start,
+                            end: end
+                        },
+                        success: function(data) {
+                            console.log('Leave data loaded:', data);
+                            leaveDataByDate = data;
+                            // Thêm leave info vào cells
+                            addLeaveInfoToCells();
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Lỗi khi tải dữ liệu nghỉ phép:", error);
+                        }
+                    });
+                }
+
+                calendar = new FullCalendar.Calendar(calendarEl, {
                     headerToolbar: {
                         left: 'prev,next today',
                         center: 'title',
-                        right: '' // Đã bỏ các nút bên phải theo yêu cầu
+                        right: ''
                     },
                     initialView: 'dayGridMonth',
                     locale: 'vi',
                     timeZone: 'Asia/Ho_Chi_Minh',
                     
-                    // --- CÀI ĐẶT CHẾ ĐỘ CHỈ XEM ---
+                    // Chế độ chỉ xem
                     editable: false,
                     selectable: false,
                     eventClick: function(info) {
-                        info.jsEvent.preventDefault(); // Chặn mọi hành động khi click
+                        info.jsEvent.preventDefault();
                     },
                     
+                    // Load shift events (ca trực)
                     events: {
                         url: '{{ route("admin.shifts.events") }}',
                         failure: function() {
-                            console.error("Lỗi khi tải dữ liệu lịch cho dashboard.");
+                            console.error("Lỗi khi tải dữ liệu lịch ca trực.");
                         }
                     },
                     
+                    // Callback khi calendar đã render xong
                     eventDidMount: function(info) {
-                        // Thêm tooltip cho event
+                        // Tooltip cho event (ca trực)
                         if (info.event.title) {
                             $(info.el).tooltip({
                                 title: info.event.title,
@@ -138,43 +209,26 @@
                                 container: 'body'
                             });
                         }
+                    },
 
-                        // Thêm thông tin nhân viên nghỉ phép bên dưới event
-                        var event = info.event;
-                        var onLeaveUsers = event.extendedProps.on_leave_users || [];
-                        
-                        if (onLeaveUsers.length > 0) {
-                            // Tạo text hiển thị cho nhân viên nghỉ phép
-                            var leaveUsersText = onLeaveUsers.map(function(user) {
-                                return user.name + ' (nghỉ)';
-                            }).join(', ');
-                            
-                            // Tìm day cell chứa event này
-                            var dayCell = info.el.closest('.fc-daygrid-day-frame');
-                            if (dayCell) {
-                                // Kiểm tra xem đã có info nghỉ phép chưa
-                                var existingLeaveInfo = dayCell.querySelector('.leave-info-below');
-                                if (!existingLeaveInfo) {
-                                    // Tạo element hiển thị thông tin nghỉ phép
-                                    var leaveInfoEl = document.createElement('div');
-                                    leaveInfoEl.className = 'leave-info-below';
-                                    leaveInfoEl.textContent = leaveUsersText;
-                                    
-                                    // Thêm vào cuối day cell
-                                    dayCell.appendChild(leaveInfoEl);
-                                }
-                            }
-                        }
+                    // Callback khi thay đổi view/tháng
+                    datesSet: function(info) {
+                        // Fetch leave data mỗi khi đổi tháng
+                        fetchLeaveData();
                     },
                 });
+
                 calendar.render();
+                
+                // Fetch leave data lần đầu sau khi render
+                setTimeout(function() {
+                    fetchLeaveData();
+                }, 500);
             }
         }
 
-        // --- SỬA LỖI F5 ---
         // Hàm chính để chạy việc khởi tạo
         function runCalendarInitialization() {
-            // Chỉ chạy nếu tìm thấy element của lịch trên trang
             if (!document.getElementById('dashboard-calendar-widget')) {
                 return;
             }
@@ -182,11 +236,9 @@
             loadCss('https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css');
             loadScript('https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js', function() {
                 loadScript('https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/vi.js', function() {
-                    // Đảm bảo jQuery đã load xong trước khi dùng tooltip
                     if (window.jQuery) {
                         initializeDashboardCalendar();
                     } else {
-                        // Nếu jQuery chưa có, load nó rồi mới khởi tạo lịch
                         loadScript('{{ admin_asset("vendor/laravel-admin/AdminLTE/plugins/jQuery/jQuery-2.1.4.min.js") }}', initializeDashboardCalendar);
                     }
                 });
