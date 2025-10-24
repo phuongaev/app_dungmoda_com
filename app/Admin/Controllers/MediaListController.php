@@ -84,8 +84,8 @@ class MediaListController extends Controller
     {
         $grid = new Grid(new MediaList);
         
-        // Sắp xếp theo id giảm dần (DESC)
-        $grid->model()->orderBy('id', 'desc');
+        // Sắp xếp theo priority giảm dần (ưu tiên trước), sau đó theo id giảm dần
+        $grid->model()->orderBy('priority', 'desc')->orderBy('id', 'desc');
         // Eager load cho nhanh
         $grid->model()->with(['products', 'source']);
 
@@ -112,68 +112,56 @@ class MediaListController extends Controller
                     });
                 }
             }, 'Mã mẫu mã');
-
-            // Filter dropdown Nguồn (source_name)
-            $filter->where(function ($query) {
-                if ($this->input) {
-                    $query->whereHas('source', function ($q) {
-                        $q->where('source_name', $this->input);
-                    });
-                }
-            }, 'Nguồn')->select(
-                MediaSource::all()->pluck('source_name', 'source_name')
-            );
-        });
-
-        // Tạo nhanh data
-        $grid->quickCreate(function ($form) {
-            $form->text('media_url', 'Ảnh');
-            $form->select('variations_code', 'Mã mẫu mã')->options(
-                Product::all()->pluck('variations_code', 'variations_code')
-            );
-            $form->select('source_id', 'Nguồn')->options(
-                MediaSource::all()->pluck('source_name', 'id')
-            );
-            $form->select('type', 'Loại media')->options([1 => 'Hình ảnh', 2 => 'Video'])->default(1);
         });
 
 
-        $grid->id('ID');
+        $grid->id('ID')->sortable();
 
-        // $grid->media_url('media_url');
-        $grid->column('media_url', 'Ảnh')->display(function ($url) {
-            $id = uniqid('copy_');
-            $editUrl = "/admin/media-lists/{$this->id}/edit";
+        // Hiển thị ảnh + button copy + edit
+        $grid->media_url('Hình ảnh')->display(function($url) {
+            // ID của hàng
+            $id = $this->id;
+            $editUrl = admin_url("media-lists/$id/edit");
+
+            // Img
             $imgHtml = "
-                <a href='$url' data-toggle='lightbox' style='float:left;'>
-                    <img src='$url' style='max-width:80px;max-height:80px;border-radius:8px;box-shadow:0 1px 4px #bbb;cursor:pointer'/>
-                </a>
+                <div style='float:left; margin-right:8px;'>
+                    <img src='$url' style='width:100px; height:auto; border-radius:4px;' />
+                </div>
             ";
 
-            $btnHtml = "
-                <div style='float:right; display:flex; align-items:center; gap:8px;'>
-                    <button
-                        type='button'
-                        class='btn btn-xs btn-outline-primary'
-                        style='padding:2px 10px;font-size:12px;'
-                        id='$id'
-                        onclick=\"navigator.clipboard.writeText('$url');var b=document.getElementById('$id');b.innerText='Đã copy!';setTimeout(()=>{b.innerText='Pancake';},1000);\"
-                    >Pancake</button>
+            // Buttons (Copy, Copy Local, Edit)
+            $btnHtml = "<div style='float:left;'>";
+            
+            // Copy URL
+            $btnHtml .= "
+                <button
+                    class='btn btn-xs btn-outline-primary'
+                    style='padding:2px 10px;font-size:12px; margin-bottom:4px;'
+                    onclick=\"
+                        let u='$url';
+                        navigator.clipboard.writeText(u);
+                        let b=this;
+                        b.innerText='Copied!';
+                        setTimeout(()=>{b.innerText='Copy';},1000);
+                    \"
+                >Copy</button>
             ";
 
-            // Nút Copy Local nếu có
+            // Copy Local nếu có
             if (!empty($this->local_url)) {
-                $localId = uniqid('copy_local_');
-                $localUrl = url($this->local_url);
+                $localUrl = $this->local_url;
                 $btnHtml .= "
                     <button
-                        type='button'
-                        class='btn btn-xs btn-outline-warning'
-                        style='padding:2px 10px;font-size:12px;'
-                        id='$localId'
-                        onclick=\"navigator.clipboard.writeText('$localUrl');var b=document.getElementById('$localId');b.innerText='Đã copy!';setTimeout(()=>{b.innerText='Local';},1000);\"
-                    >Local</button>
-                ";
+                        class='btn btn-xs btn-outline-info'
+                        style='padding:2px 10px;font-size:12px; margin-bottom:4px; margin-left:4px;'
+                        onclick=\"
+                            let u='$localUrl';
+                            navigator.clipboard.writeText(u);
+                            let b=this;
+                            b.innerText='Copied!';setTimeout(()=>{b.innerText='Local';},1000);\"
+                        >Local</button>
+                    ";
             }
 
             $btnHtml .= "
@@ -195,6 +183,11 @@ class MediaListController extends Controller
         $grid->column('products', 'Mã sản phẩm')->display(function($products) {
             return collect($products)->pluck('product_code')->implode('<br>');
         });
+
+        // ============= THÊM CỘT PRIORITY SWITCH Ở ĐÂY =============
+        $grid->column('priority', 'Ưu tiên')->switch();
+        // ===========================================================
+
         // Hiển thị thông tin mẫu mã
         $grid->column('variations', 'Mã mẫu mã')->display(function ($variations) {
             // dd($variations);
@@ -243,6 +236,7 @@ class MediaListController extends Controller
         $show->media_order('media_order');
         $show->type('type');
         $show->status('status');
+        $show->priority('priority');
         $show->created_at(trans('admin.created_at'));
         $show->updated_at(trans('admin.updated_at'));
 
@@ -277,6 +271,10 @@ class MediaListController extends Controller
         $form->select('status', 'Trạng thái')->options([
             1 => 'Mới'
         ]);
+        
+        // Thêm switch cho priority trong form
+        $form->switch('priority', 'Ưu tiên')->default(0);
+        
         // $form->display(trans('admin.created_at'));
         // $form->display(trans('admin.updated_at'));
 

@@ -323,4 +323,8 @@ class AttendanceReportController extends Controller
             'avg_hours_per_check_in' => $avgHoursPerCheckIn
         ];
     }
+
+
+
+    
 }

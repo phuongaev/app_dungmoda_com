@@ -8,6 +8,7 @@ use App\Models\Label;
 use App\Models\TelegramHistory;
 use App\Services\TelegramService;
 use App\Models\PosOrder;
+use App\Models\Attendance;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -357,6 +358,123 @@ class WebhookController extends Controller
             'order_id' => $orderId,
             'customer_phone' => $data['customer_phone']
         ]);
+    }
+
+
+    /**
+     * API endpoint trả về báo cáo chấm công tháng hiện tại
+     * URL: /admin/api/attendance-reports
+     * Tham số: ?month=2025-09 (optional)
+     */
+    public function apiReport(Request $request)
+    {
+        try {
+            // Lấy tham số month từ request hoặc mặc định là tháng hiện tại
+            $month = $request->get('month');
+            
+            // Xử lý tháng
+            if ($month) {
+                // Validate format YYYY-MM
+                if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid month format. Use YYYY-MM format (e.g., 2025-09)',
+                        'data' => []
+                    ], 400);
+                }
+                
+                try {
+                    $startDate = Carbon::parse($month . '-01')->startOfMonth();
+                    $endDate = Carbon::parse($month . '-01')->endOfMonth();
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid month value',
+                        'data' => []
+                    ], 400);
+                }
+            } else {
+                // Mặc định tháng hiện tại
+                $startDate = Carbon::now()->startOfMonth();
+                $endDate = Carbon::now()->endOfMonth();
+            }
+
+            // Query dữ liệu attendance
+            $attendances = Attendance::with(['user'])
+                ->whereBetween('work_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+                ->whereNotNull('user_id')
+                ->whereNotNull('work_date')
+                ->get();
+
+            // Lọc attendance hợp lệ (có user)
+            $validAttendances = $attendances->filter(function($attendance) {
+                return $attendance->user_id && $attendance->user;
+            });
+
+            // Tính toán số liệu cho từng nhân viên
+            $employeeReports = [];
+            $attendancesByUser = $validAttendances->groupBy('user_id');
+
+            foreach ($attendancesByUser as $userId => $userAttendances) {
+                if (!$userId || $userAttendances->isEmpty()) {
+                    continue;
+                }
+                
+                $user = $userAttendances->first()->user;
+                if (!$user) {
+                    continue;
+                }
+
+                // Tính tổng giờ làm việc
+                $totalMinutes = $userAttendances->sum(function ($attendance) {
+                    $hours = $attendance->work_hours ?? 0;
+                    $minutes = $attendance->work_minutes ?? 0;
+                    return ($hours * 60) + $minutes;
+                });
+
+                // Làm tròn xuống theo giờ
+                $totalHours = floor($totalMinutes / 60);
+
+                // Đếm số ngày làm việc thực tế (distinct work_date có check-in)
+                $workDays = $userAttendances
+                    ->filter(function($attendance) {
+                        return $attendance->check_in_time !== null && $attendance->work_date;
+                    })
+                    ->pluck('work_date')
+                    ->unique()
+                    ->count();
+
+                $employeeReports[] = [
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'total_work_hours' => $totalHours,
+                    'total_work_days' => $workDays
+                ];
+            }
+
+            // Sắp xếp theo tổng giờ làm việc (giảm dần)
+            usort($employeeReports, function ($a, $b) {
+                return $b['total_work_hours'] <=> $a['total_work_hours'];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance report retrieved successfully',
+                'period' => [
+                    'month' => $startDate->format('Y-m'),
+                    'start_date' => $startDate->format('Y-m-d'),
+                    'end_date' => $endDate->format('Y-m-d')
+                ],
+                'data' => $employeeReports
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate attendance report: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
     }
 
 

@@ -76,6 +76,7 @@ Route::group([
     $router->get('attendance/today-status', 'AttendanceController@todayStatus');
     $router->get('attendance/today-history', 'AttendanceController@todayHistory');
     $router->get('attendance-reports', 'AttendanceReportController@index');
+    
 
 
     // Task Categories
@@ -201,6 +202,10 @@ Route::group([
     // ===== Workflow API Dashboard =====
     $router->get('workflow-dashboard', 'WorkflowDashboardController@index')->name('workflow-dashboard');
     $router->get('workflow-dashboard/analytics', 'WorkflowDashboardController@analytics')->name('workflow-dashboard.analytics');
+
+
+    // ZALO PAGE
+    $router->resource('zalo-pages', ZaloPageController::class);
 
 
 

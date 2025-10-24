@@ -8,6 +8,17 @@ class MediaList extends Model
 {
     // protected $table = 'media_lists';
 
+    // Thêm priority vào fillable để có thể mass assignment
+    protected $fillable = [
+        'source_id',
+        'media_url',
+        'local_url',
+        'media_order',
+        'type',
+        'status',
+        'priority'
+    ];
+
     // Quan hệ nhiều-nhiều tới Product
     public function products()
     {
@@ -26,8 +37,6 @@ class MediaList extends Model
         return $this->belongsTo(MediaSource::class, 'source_id', 'id');
     }
 
-
-
     // Xóa dữ liệu liên kết
     protected static function booted()
     {
@@ -35,5 +44,4 @@ class MediaList extends Model
             $mediaList->products()->detach();
         });
     }
-
 }

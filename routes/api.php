@@ -27,8 +27,8 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::group(['prefix' => 'webhook'], function () {
    Route::post('/telegram', [WebhookController::class,'telegram']);
    Route::get('/admin-config/{key}', [WebhookController::class,'getAdminConfig']);
-
    Route::post('/pos-pancake', [WebhookController::class,'handlePosPancake']);
+   Route::get('/attendance-reports', [WebhookController::class,'apiReport']);
 
 });
 
